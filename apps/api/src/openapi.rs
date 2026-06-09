@@ -231,6 +231,9 @@ fn add_mgmt_users(p: &mut Map<String, Value>) {
     merge_into(p, "/v2/mgmt/user/search", post_op("searchUsers", "Search users",
         "Returns users matching filters. All filters AND-composed; within-list OR.\n\n**Filters:** `loginIds`, `statuses`, `tenantIds`, `roleNames`, `text`, `sort`, `createdAfter`, `createdBefore`.\n\n**Text search:** case-insensitive substring across loginId, name, email, phone.\n\n**Sort:** `[{ \"field\": \"name\", \"desc\": false }]`. Fields: name, email, phone, status, loginId, createdTime.",
         t, "{ loginIds?, statuses?, tenantIds?, roleNames?, text?, sort?, limit?, page? }"));
+    merge_into(p, "/v1/mgmt/project/snapshot/export", post_op("exportProjectSnapshot", "Export project snapshot",
+        "Exports project configuration (roles, permissions, connectors, JWT templates, custom attributes, auth method config) as a Descope-style `{ \"files\": { ... } }` map. Users and tenants are excluded, matching cloud Descope (they are exported via their own APIs).",
+        t, "{} (no request body required)"));
     merge_into(
         p,
         "/v1/mgmt/user/update",

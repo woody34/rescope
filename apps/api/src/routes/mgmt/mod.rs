@@ -6,6 +6,7 @@ pub mod idp;
 pub mod jwt;
 pub mod jwt_templates;
 pub mod permissions;
+pub mod project;
 pub mod roles;
 pub mod tenant;
 pub mod user;
