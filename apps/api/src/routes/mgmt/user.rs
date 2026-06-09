@@ -908,7 +908,10 @@ mod tests {
         .unwrap();
         let users = state.users.read().await;
         let user = users.load("nophone@test.com").unwrap();
-        assert!(!user.verified_phone, "phone-less user must not be phone-verified");
+        assert!(
+            !user.verified_phone,
+            "phone-less user must not be phone-verified"
+        );
     }
 
     #[tokio::test]
@@ -930,7 +933,10 @@ mod tests {
         .unwrap();
         let users = state.users.read().await;
         let user = users.load("withphone@test.com").unwrap();
-        assert!(user.verified_phone, "user with a phone + verifiedPhone:true must be verified");
+        assert!(
+            user.verified_phone,
+            "user with a phone + verifiedPhone:true must be verified"
+        );
     }
 
     // ─── generate_otp_for_test_user ───
