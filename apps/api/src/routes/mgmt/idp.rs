@@ -165,7 +165,7 @@ mod tests {
         .await
         .unwrap();
         let id = created["idp"]["id"].as_str().unwrap().to_string();
-        update_idp(
+        let _ = update_idp(
             State(state.clone()),
             headers.clone(),
             Json(UpdateIdpRequest {
@@ -198,7 +198,7 @@ mod tests {
         .await
         .unwrap();
         let id = created["idp"]["id"].as_str().unwrap().to_string();
-        delete_idp(
+        let _ = delete_idp(
             State(state.clone()),
             headers.clone(),
             Json(DeleteIdpRequest { id }),
