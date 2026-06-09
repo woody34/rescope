@@ -112,15 +112,23 @@ impl EmulatorState {
         }
     }
 
-    /// Clear all runtime stores back to empty (seed data, tokens, lockouts).
+    /// Clear all runtime stores back to empty (seed data, lockouts).
     /// Also resets auth_method_config so method toggles (e.g. OTP on/off) don't
     /// bleed across tests. Other config stores (roles, permissions, access_keys,
     /// jwt_templates, connectors, custom_attributes) are intentionally preserved —
     /// they mirror Descope project config in the real console.
+    ///
+    /// The magic-link/SAML token store is intentionally NOT reset here. Parallel
+    /// test shards share one emulator process; if this cleared `tokens`, a
+    /// `/emulator/reset` from one shard would destroy an in-flight magic-link
+    /// token another shard just minted and is about to verify, surfacing as a
+    /// flaky "Failed to load magic link token" (token not found). Tokens are
+    /// ephemeral, single-use (consumed on verify), and keyed by a random value
+    /// behind a FIFO cap, so leaving them across a reset is harmless for test
+    /// isolation while removing the cross-shard race.
     pub async fn reset_stores(&self) {
         self.users.write().await.reset();
         self.tenants.write().await.reset();
-        self.tokens.write().await.reset();
         self.revoked.write().await.reset();
         self.otps.write().await.reset();
         self.user_revocations.write().await.clear();
