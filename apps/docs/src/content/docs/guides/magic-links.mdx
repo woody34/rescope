@@ -1,0 +1,56 @@
+---
+title: Magic Links
+description: Test magic link authentication flows with Rescope.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+Magic links send a one-click sign-in URL to the user's email. In Rescope, the link token is available via the emulator API — no real email is sent.
+
+## How it works in Rescope
+
+Rescope generates a real JWT-backed token for the magic link. Your tests retrieve the token and verify it directly, simulating the user clicking the link.
+
+<Steps>
+
+1. **Request a magic link**
+
+   ```bash
+   curl -X POST http://localhost:4600/v1/auth/magiclink/signin/email \
+     -H 'Content-Type: application/json' \
+     -d '{"loginId": "alice@example.com", "URI": "http://localhost:3000/auth/callback"}'
+   ```
+
+2. **Retrieve the pending magic link token**
+
+   Rescope logs the token to stdout and also exposes it via the OTP endpoint (magic links share the same store):
+
+   ```bash
+   curl http://localhost:4600/emulator/otp/alice@example.com
+   # → {"code": "eyJ..."}   ← the magic link token
+   ```
+
+3. **Verify the token**
+
+   ```bash
+   curl -X POST http://localhost:4600/v1/auth/magiclink/verify \
+     -H 'Content-Type: application/json' \
+     -d '{"token": "eyJ..."}'
+   # → {"sessionJwt": "eyJ...", "refreshJwt": "eyJ..."}
+   ```
+
+</Steps>
+
+<Aside type="note">
+  The magic link token is a full JWT. You can decode it to inspect claims, but pass it opaquely to the verify endpoint.
+</Aside>
+
+## Supported endpoints
+
+| Endpoint | Description |
+|---|---|
+| `POST /v1/auth/magiclink/signin/email` | Sign in via email magic link |
+| `POST /v1/auth/magiclink/signup/email` | Sign up via email magic link |
+| `POST /v1/auth/magiclink/signup-in/email` | Sign up or sign in |
+| `POST /v1/auth/magiclink/verify` | Verify a magic link token |
+| `POST /v1/auth/magiclink/update/email` | Update email via magic link |

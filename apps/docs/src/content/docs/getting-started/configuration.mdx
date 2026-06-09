@@ -1,0 +1,73 @@
+---
+title: Configuration
+description: Environment variables, seed files, and startup options.
+---
+
+Rescope is configured entirely via environment variables. There are no config files — just set variables in your shell, `.env` file, or CI environment.
+
+## Environment Variables
+
+| Variable | Default | Description |
+|---|---|---|
+| `RESCOPE_PORT` | `4600` | Port the emulator HTTP server listens on |
+| `RESCOPE_PROJECT_ID` | `Ptest1234567890123456789` | Project ID returned in tokens and API responses |
+| `RESCOPE_MANAGEMENT_KEY` | _(auto-generated)_ | Bearer token required for management API calls |
+| `RESCOPE_SEED_FILE` | _(none)_ | Path to a JSON seed file to pre-populate users and tenants on startup |
+
+## Example: `.env` file
+
+```bash
+RESCOPE_PORT=4600
+RESCOPE_PROJECT_ID=Ptest_myapp_local
+RESCOPE_MANAGEMENT_KEY=K_myapp_local_key
+RESCOPE_SEED_FILE=./seed.json
+```
+
+## Seed Files
+
+A seed file pre-populates the emulator with users and tenants on startup. The file is re-applied on `/emulator/reset`.
+
+```json
+{
+  "users": [
+    {
+      "loginIds": ["alice@example.com"],
+      "email": "alice@example.com",
+      "name": "Alice",
+      "status": "enabled",
+      "roleNames": ["admin"]
+    }
+  ],
+  "tenants": [
+    {
+      "id": "acme",
+      "name": "Acme Corp",
+      "domains": ["acme.com"]
+    }
+  ]
+}
+```
+
+## Startup Banner
+
+On startup, Rescope prints its configuration:
+
+```
+INFO rescope: ─────────────────────────────────────────────
+INFO rescope:   Rescope — Descope Emulator
+INFO rescope: ─────────────────────────────────────────────
+INFO rescope: port=4600 project_id="Ptest1234567890123456789"
+INFO rescope: management_key="K5c6e9…"
+INFO rescope: ⚠️  Do not use in production
+INFO rescope: ✅ Ready → http://localhost:4600
+```
+
+## Reset the emulator
+
+You can reset all in-memory state to the seed state (or empty) at any time:
+
+```bash
+curl -X POST http://localhost:4600/emulator/reset
+```
+
+This is useful in test suite `beforeEach` hooks.

@@ -1,0 +1,9 @@
+{
+  "name": "rescope-playground",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "npx -y serve public -p 4501 -s --cors",
+    "build:wasm": "cd ../rescope-wasm && wasm-pack build --target web --release && cp -r pkg ../../apps/playground/public/wasm"
+  }
+}

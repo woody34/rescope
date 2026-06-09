@@ -1,0 +1,53 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "ui",
+  "projectType": "application",
+  "sourceRoot": "apps/ui/src",
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -b && vite build",
+        "cwd": "apps/ui"
+      },
+      "outputs": [
+        "{workspaceRoot}/apps/ui/dist"
+      ]
+    },
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vite",
+        "cwd": "apps/ui"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx playwright test --retries=0 --reporter=list --timeout=15000",
+        "cwd": "apps/ui"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "eslint .",
+        "cwd": "apps/ui"
+      }
+    },
+    "format": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prettier --write \"src/**/*.{ts,tsx,css}\" \"e2e/**/*.ts\"",
+        "cwd": "apps/ui"
+      }
+    },
+    "format-check": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "prettier --check \"src/**/*.{ts,tsx,css}\" \"e2e/**/*.ts\"",
+        "cwd": "apps/ui"
+      }
+    }
+  }
+}

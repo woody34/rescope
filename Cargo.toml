@@ -1,0 +1,4 @@
+[workspace]
+members = ["apps/api", "libs/rescope-core"]
+exclude = ["spike/wasm-poc", "apps/rescope-wasm"]
+resolver = "2"

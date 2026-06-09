@@ -1,0 +1,184 @@
+{
+  "scripts": [
+    {
+      "name": "dev",
+      "command": "npm run dev",
+      "mode": "service",
+      "category": "dev"
+    },
+    {
+      "name": "open",
+      "command": "npm run open",
+      "mode": "command",
+      "category": "other"
+    },
+    {
+      "name": "docs:dev",
+      "command": "npm run docs:dev",
+      "mode": "command",
+      "category": "other"
+    },
+    {
+      "name": "docs:open",
+      "command": "npm run docs:open",
+      "mode": "command",
+      "category": "other"
+    },
+    {
+      "name": "docs:build:wasm",
+      "command": "npm run docs:build:wasm",
+      "mode": "command",
+      "category": "build"
+    },
+    {
+      "name": "build",
+      "command": "npm run build",
+      "mode": "command",
+      "category": "build"
+    },
+    {
+      "name": "format",
+      "command": "npm run format",
+      "mode": "command",
+      "category": "format"
+    },
+    {
+      "name": "lint",
+      "command": "npm run lint",
+      "mode": "command",
+      "category": "lint"
+    },
+    {
+      "name": "test",
+      "command": "npm run test",
+      "mode": "command",
+      "category": "test"
+    },
+    {
+      "name": "test:unit",
+      "command": "npm run test:unit",
+      "mode": "command",
+      "category": "test"
+    },
+    {
+      "name": "test:api",
+      "command": "npm run test:api",
+      "mode": "command",
+      "category": "test"
+    },
+    {
+      "name": "test:sdk-js",
+      "command": "npm run test:sdk-js",
+      "mode": "command",
+      "category": "test"
+    },
+    {
+      "name": "test:sdk-nodejs",
+      "command": "npm run test:sdk-nodejs",
+      "mode": "command",
+      "category": "test"
+    },
+    {
+      "name": "test:platform",
+      "command": "npm run test:platform",
+      "mode": "command",
+      "category": "test"
+    },
+    {
+      "name": "test:e2e",
+      "command": "npm run test:e2e",
+      "mode": "command",
+      "category": "test"
+    },
+    {
+      "name": "test:e2e:watch",
+      "command": "npm run test:e2e:watch",
+      "mode": "command",
+      "category": "test"
+    },
+    {
+      "name": "test:nestjs-sample",
+      "command": "npm run test:nestjs-sample",
+      "mode": "command",
+      "category": "test"
+    },
+    {
+      "name": "test:nestjs-sample:watch",
+      "command": "npm run test:nestjs-sample:watch",
+      "mode": "command",
+      "category": "test"
+    },
+    {
+      "name": "api:coverage",
+      "command": "npm run api:coverage",
+      "mode": "command",
+      "category": "other"
+    },
+    {
+      "name": "api:coverage:html",
+      "command": "npm run api:coverage:html",
+      "mode": "command",
+      "category": "other"
+    },
+    {
+      "name": "graph",
+      "command": "npm run graph",
+      "mode": "command",
+      "category": "other"
+    },
+    {
+      "name": "make:build",
+      "command": "make build",
+      "mode": "command",
+      "category": "build"
+    },
+    {
+      "name": "make:test",
+      "command": "make test",
+      "mode": "command",
+      "category": "test"
+    },
+    {
+      "name": "test-integration",
+      "command": "make test-integration",
+      "mode": "command",
+      "category": "test"
+    },
+    {
+      "name": "test-parity",
+      "command": "make test-parity",
+      "mode": "command",
+      "category": "test"
+    },
+    {
+      "name": "coverage",
+      "command": "make coverage",
+      "mode": "command",
+      "category": "other"
+    },
+    {
+      "name": "make:lint",
+      "command": "make lint",
+      "mode": "command",
+      "category": "lint"
+    },
+    {
+      "name": "cargo:build",
+      "command": "cargo build",
+      "mode": "command",
+      "category": "build"
+    },
+    {
+      "name": "cargo:test",
+      "command": "cargo test",
+      "mode": "command",
+      "category": "test"
+    },
+    {
+      "name": "check",
+      "command": "cargo check",
+      "mode": "command",
+      "category": "typecheck"
+    }
+  ]
+}

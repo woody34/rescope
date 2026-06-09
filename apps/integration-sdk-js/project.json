@@ -1,0 +1,15 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "integration-sdk-js",
+  "projectType": "application",
+  "implicitDependencies": ["api"],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npm install --silent && npx vitest run",
+        "cwd": "apps/integration-sdk-js"
+      }
+    }
+  }
+}

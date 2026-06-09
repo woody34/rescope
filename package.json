@@ -1,0 +1,34 @@
+{
+  "name": "rescope-workspace",
+  "private": true,
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "nx run-many -t dev --projects=api,ui --parallel",
+    "open": "wait-on tcp:5173 tcp:4600 --timeout=15000 && open 'http://localhost:5173'",
+    "docs:dev": "cd apps/docs && npx astro dev",
+    "docs:open": "wait-on tcp:4321 --timeout=15000 && open 'http://localhost:4321'",
+    "docs:build:wasm": "cd apps/docs && npm run build:wasm",
+    "build": "nx run-many -t build --projects=api,ui",
+    "build:release": "./scripts/release-build.sh",
+    "format": "nx run-many -t format",
+    "lint": "nx run-many -t lint",
+    "test": "nx run-many -t test --projects=api,integration-api,ui,nestjs-sample,platform-tests",
+    "test:unit": "nx run api:test",
+    "test:api": "nx run integration-api:test",
+    "test:sdk-js": "nx run integration-sdk-js:test",
+    "test:sdk-nodejs": "nx run integration-sdk-nodejs:test",
+    "test:platform": "nx run platform-tests:test",
+    "test:e2e": "nx run ui:test",
+    "test:e2e:watch": "cd apps/ui && npx playwright test --headed --reporter=list",
+    "test:nestjs-sample": "nx run nestjs-angular-sample:e2e",
+    "test:nestjs-sample:watch": "cd apps/nestjs-angular-sample && npx playwright test --config=playwright.local.config.ts --headed",
+    "api:coverage": "bash scripts/coverage-all.sh",
+    "api:coverage:html": "bash scripts/coverage-all.sh --html",
+    "graph": "nx graph"
+  },
+  "devDependencies": {
+    "nx": "^20.8.4",
+    "wait-on": "^9.0.4"
+  }
+}

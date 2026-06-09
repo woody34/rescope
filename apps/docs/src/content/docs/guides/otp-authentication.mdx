@@ -1,0 +1,91 @@
+---
+title: OTP Authentication
+description: Test one-time password flows with Rescope.
+---
+
+import { Steps, Aside } from '@astrojs/starlight/components';
+
+OTP (One-Time Password) authentication sends a 6-digit code to the user's email or phone. In Rescope, codes are available immediately via the emulator API — no real email or SMS is sent.
+
+## How it works in Rescope
+
+When Rescope generates an OTP, it stores the code in memory. Your tests retrieve it via the emulator escape-hatch endpoint:
+
+```bash
+GET /emulator/otp/:loginId
+```
+
+This lets you write fully automated tests without mocking or intercepting emails.
+
+## Complete flow example
+
+<Steps>
+
+1. **Sign up or sign in with OTP**
+
+   ```bash
+   # Sign in via email
+   curl -X POST http://localhost:4600/v1/auth/otp/signin/email \
+     -H 'Content-Type: application/json' \
+     -d '{"loginId": "alice@example.com", "loginOptions": {}}'
+   ```
+
+2. **Retrieve the OTP code**
+
+   ```bash
+   curl http://localhost:4600/emulator/otp/alice@example.com
+   # → {"code": "481923"}
+   ```
+
+3. **Verify the code**
+
+   ```bash
+   curl -X POST http://localhost:4600/v1/auth/otp/verify/email \
+     -H 'Content-Type: application/json' \
+     -d '{"loginId": "alice@example.com", "code": "481923"}'
+   # → {"sessionJwt": "eyJ...", "refreshJwt": "eyJ..."}
+   ```
+
+</Steps>
+
+## SDK example (Node.js)
+
+```typescript
+import DescopeClient from '@descope/node-sdk';
+import fetch from 'node-fetch';
+
+const client = DescopeClient({
+  projectId: process.env.DESCOPE_PROJECT_ID,
+  baseURL: 'http://localhost:4600',
+});
+
+const loginId = 'alice@example.com';
+
+// Trigger OTP
+await client.otp.signIn.email(loginId);
+
+// Fetch the code from the emulator
+const resp = await fetch(`http://localhost:4600/emulator/otp/${loginId}`);
+const { code } = await resp.json();
+
+// Verify
+const session = await client.otp.verify.email(loginId, code);
+console.log('Session JWT:', session.data.sessionJwt);
+```
+
+<Aside type="tip">
+  In Playwright or Jest, call the emulator endpoint in your test's `beforeEach` or step helpers to retrieve and submit OTP codes automatically.
+</Aside>
+
+## Supported OTP endpoints
+
+| Method | Endpoint |
+|---|---|
+| Sign in (email) | `POST /v1/auth/otp/signin/email` |
+| Sign up (email) | `POST /v1/auth/otp/signup/email` |
+| Sign up-in (email) | `POST /v1/auth/otp/signup-in/email` |
+| Verify (email) | `POST /v1/auth/otp/verify/email` |
+| Sign in (SMS) | `POST /v1/auth/otp/signin/phone/sms` |
+| Sign up (SMS) | `POST /v1/auth/otp/signup/phone/sms` |
+| Verify (SMS) | `POST /v1/auth/otp/verify/phone/sms` |
+| Get code | `GET /emulator/otp/:loginId` |

@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --manifest-path apps/api/Cargo.toml --check
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/api
+      - name: Provide UI assets for rust-embed (apps/ui/dist must exist at compile time)
+        run: mkdir -p apps/ui/dist && printf '<!doctype html><title>rescope</title>' > apps/ui/dist/index.html
+      - run: cargo clippy --manifest-path apps/api/Cargo.toml -- -D warnings
+
+  test-rust:
+    name: Rust Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/api
+      - name: Provide UI assets for rust-embed (apps/ui/dist must exist at compile time)
+        run: mkdir -p apps/ui/dist && printf '<!doctype html><title>rescope</title>' > apps/ui/dist/index.html
+      - run: cargo test --manifest-path apps/api/Cargo.toml --lib
+
+  test-integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/api
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Provide UI assets for rust-embed (apps/ui/dist must exist at compile time)
+        run: mkdir -p apps/ui/dist && printf '<!doctype html><title>rescope</title>' > apps/ui/dist/index.html
+      - name: Build emulator binary
+        run: cargo build --manifest-path apps/api/Cargo.toml --release
+      - name: Run integration tests
+        run: npx nx test integration-api
+        env:
+          DESCOPE_EMULATOR_BIN: ${{ github.workspace }}/target/release/rescope

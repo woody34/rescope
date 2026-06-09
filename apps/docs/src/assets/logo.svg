@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 140 28" fill="none">
+  <rect x="0" y="4" width="20" height="20" rx="3" fill="#39ff14" opacity="0.15" stroke="#39ff14" stroke-width="1.5"/>
+  <rect x="4" y="8" width="12" height="12" rx="2" fill="#39ff14"/>
+  <text x="28" y="21" font-family="'SF Mono', 'Fira Code', monospace" font-size="16" font-weight="700" fill="#39ff14" letter-spacing="0.05em">RESCOPE</text>
+</svg>

@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📋 Feature coverage & known gaps
+    url: https://github.com/woody34/rescope/blob/main/docs/feature-summaries.md
+    about: See which Descope features are implemented (and how they behave) before opening an issue — your case may be a documented deviation.

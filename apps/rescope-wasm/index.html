@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Rescope WASM Spike</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; }
+    body { font-family: 'SF Mono', 'Fira Code', monospace; background: #0a0a0f; color: #e0e0e0; padding: 2rem; }
+    h1 { color: #39ff14; font-size: 1.5rem; margin-bottom: 1rem; }
+    #status { padding: 1rem; border: 1px solid #333; border-radius: 8px; margin-bottom: 1.5rem; font-size: 0.9rem; }
+    #status.ready { border-color: #39ff14; }
+    #status.error { border-color: #ff4444; }
+    .actions { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+    button { background: #1a1a2e; color: #39ff14; border: 1px solid #39ff14; padding: 0.6rem 1.2rem;
+             border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 0.85rem; }
+    button:hover { background: #39ff14; color: #0a0a0f; }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    #log { background: #111; border: 1px solid #333; border-radius: 8px; padding: 1rem;
+           font-size: 0.8rem; max-height: 400px; overflow-y: auto; white-space: pre-wrap; }
+    .log-entry { margin-bottom: 0.3rem; }
+    .log-entry.success { color: #39ff14; }
+    .log-entry.error { color: #ff4444; }
+    .log-entry.info { color: #888; }
+    .metric { color: #ffaa00; }
+  </style>
+</head>
+<body>
+  <h1>🧪 Rescope WASM Spike</h1>
+
+  <div id="status">⏳ Loading WASM module...</div>
+
+  <div class="actions">
+    <button id="btn-health" disabled onclick="callWasm('GET', '/health')">GET /health</button>
+    <button id="btn-create" disabled onclick="createUser()">POST /v1/mgmt/user/create</button>
+    <button id="btn-search" disabled onclick="callWasm('POST', '/v1/mgmt/user/search', '{}')">POST /v1/mgmt/user/search</button>
+    <button id="btn-404" disabled onclick="callWasm('GET', '/v1/unknown')">GET /v1/unknown</button>
+    <button id="btn-rsa" disabled onclick="measureRsa()">⏱ RSA Keygen</button>
+  </div>
+
+  <div id="log"></div>
+
+  <script type="module">
+    import init, { init as wasmInit, handle_request } from './pkg/rescope_wasm.js';
+
+    const statusEl = document.getElementById('status');
+    const logEl = document.getElementById('log');
+    const buttons = document.querySelectorAll('button');
+
+    function log(msg, type = 'info') {
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      entry.textContent = `[${new Date().toISOString().slice(11, 19)}] ${msg}`;
+      logEl.prepend(entry);
+    }
+
+    // ── Direct WASM approach (no service worker) ──────────────────────
+    // This spike validates the core question: can we run Rust business
+    // logic in WASM and get correct responses?
+    // The service worker layer can be added once the core works.
+
+    window.callWasm = function(method, path, body) {
+      const req = { method, path, headers: {}, body: body || null };
+      log(`→ ${method} ${path}`);
+      const t0 = performance.now();
+      const responseJson = handle_request(JSON.stringify(req));
+      const elapsed = (performance.now() - t0).toFixed(2);
+      const response = JSON.parse(responseJson);
+      log(`← ${response.status}: ${JSON.stringify(JSON.parse(response.body))} (${elapsed}ms)`,
+          response.status < 400 ? 'success' : 'error');
+    };
+
+    let userCount = 0;
+    window.createUser = function() {
+      userCount++;
+      const body = JSON.stringify({
+        loginId: `user${userCount}@test.com`,
+        email: `user${userCount}@test.com`,
+        name: `Test User ${userCount}`
+      });
+      callWasm('POST', '/v1/mgmt/user/create', body);
+    };
+
+    window.measureRsa = async function() {
+      log('⏱ This will take a few seconds...', 'info');
+      // RSA keygen happens inside WASM — let's see how long it takes
+      // For the spike, we're just measuring init time which includes keygen
+      const t0 = performance.now();
+      // Re-init to trigger keygen again
+      wasmInit(JSON.stringify({ project_id: 'benchmark' }));
+      const elapsed = (performance.now() - t0).toFixed(0);
+      log(`⏱ WASM init (includes keygen): ${elapsed}ms`, 'metric');
+    };
+
+    // ── Init ──────────────────────────────────────────────────────────
+    async function startup() {
+      try {
+        log('Loading WASM module...');
+        const t0 = performance.now();
+        await init(); // Load .wasm binary
+
+        wasmInit(JSON.stringify({ project_id: 'playground-project' }));
+        const elapsed = (performance.now() - t0).toFixed(0);
+
+        // Test health
+        const healthJson = handle_request(JSON.stringify({
+          method: 'GET', path: '/health', headers: {}, body: null
+        }));
+        const health = JSON.parse(JSON.parse(healthJson).body);
+
+        if (health.wasm) {
+          statusEl.textContent = `✅ WASM ready — initialized in ${elapsed}ms`;
+          statusEl.className = 'ready';
+          buttons.forEach(b => b.disabled = false);
+          log(`WASM initialized in ${elapsed}ms`, 'success');
+        } else {
+          throw new Error('Health check did not return wasm=true');
+        }
+      } catch (e) {
+        statusEl.textContent = `❌ Error: ${e.message}`;
+        statusEl.className = 'error';
+        log(`Init error: ${e.message}`, 'error');
+        console.error(e);
+      }
+    }
+
+    startup();
+  </script>
+</body>
+</html>

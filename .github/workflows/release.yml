@@ -1,0 +1,129 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ── Step 1: Build the React UI (shared across all platform builds) ──
+  build-ui:
+    name: Build UI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/ui/package-lock.json
+      - run: npm ci
+        working-directory: apps/ui
+      - run: npm run build
+        working-directory: apps/ui
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-dist
+          path: apps/ui/dist
+
+  # ── Step 2: Build release binaries for each platform ────────────────
+  build:
+    name: Build ${{ matrix.label }}
+    needs: build-ui
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: linux-amd64
+            target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: true
+          - label: linux-arm64
+            target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: true
+          - label: macos-amd64
+            target: x86_64-apple-darwin
+            os: macos-13
+          - label: macos-arm64
+            target: aarch64-apple-darwin
+            os: macos-14
+          - label: windows-amd64
+            target: x86_64-pc-windows-msvc
+            os: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Download pre-built UI assets into the expected location
+      - uses: actions/download-artifact@v4
+        with:
+          name: ui-dist
+          path: apps/ui/dist
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/api
+
+      - name: Install cross
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build (cross)
+        if: matrix.cross
+        run: cross build --manifest-path apps/api/Cargo.toml --release --target ${{ matrix.target }}
+
+      - name: Build (native)
+        if: ${{ !matrix.cross }}
+        run: cargo build --manifest-path apps/api/Cargo.toml --release --target ${{ matrix.target }}
+
+      - name: Package binary
+        shell: bash
+        run: |
+          bindir="target/${{ matrix.target }}/release"
+          if [[ "${{ matrix.target }}" == *"windows"* ]]; then
+            asset="rescope-${{ matrix.target }}.zip"
+            (cd "$bindir" && 7z a -bso0 "rescope.zip" rescope.exe)
+            mv "$bindir/rescope.zip" "$asset"
+          else
+            asset="rescope-${{ matrix.target }}.tar.gz"
+            tar -czf "$asset" -C "$bindir" rescope
+          fi
+          echo "ASSET=$asset" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.label }}
+          path: ${{ env.ASSET }}
+
+  # ── Step 3: Create GitHub Release with all binaries ─────────────────
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: sha256sum rescope-* > checksums-sha256.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            rescope-*
+            checksums-sha256.txt

@@ -1,0 +1,22 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "sample-app",
+  "projectType": "application",
+  "implicitDependencies": ["api"],
+  "targets": {
+    "start": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "PORT=3001 BROWSER=none npm start",
+        "cwd": "apps/sample-app"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "EMULATOR_PROJECT_ID=${EMULATOR_PROJECT_ID:-emulator-project} EMULATOR_MANAGEMENT_KEY=${EMULATOR_MANAGEMENT_KEY:-emulator-key} EMULATOR_BASE_URL=${EMULATOR_BASE_URL:-http://localhost:4600} npx playwright test",
+        "cwd": "apps/sample-app"
+      }
+    }
+  }
+}

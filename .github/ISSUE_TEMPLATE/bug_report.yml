@@ -1,0 +1,96 @@
+name: Bug report
+description: Report incorrect or missing Descope-API behavior in the Rescope emulator
+title: "[BUG] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying Rescope! It is a **fully AI-generated** emulator that was tuned for one application's Descope flows, so gaps outside that surface are expected.
+
+        To get support, two things matter most: **how your app talks to the Descope API**, and **steps that reproduce the problem**. Issues missing that information may be closed until it is provided. Please also check [`docs/feature-summaries.md`](https://github.com/woody34/rescope/blob/main/docs/feature-summaries.md) first — the behavior may be a documented deviation.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is wrong, in one or two sentences?
+    validations:
+      required: true
+  - type: input
+    id: endpoint
+    attributes:
+      label: Descope endpoint / SDK method
+      description: The specific route or SDK call involved.
+      placeholder: "e.g. POST /v1/auth/otp/verify/email  (sdk.otp.verify.email)"
+    validations:
+      required: true
+  - type: textarea
+    id: stack
+    attributes:
+      label: Your stack / technologies
+      description: The languages, frameworks, and Descope SDK (with version) you use to talk to the emulator, plus how you run Rescope.
+      placeholder: |
+        - App / framework: e.g. React 19 (web SDK) + NestJS (Node SDK)
+        - Descope SDK + version: e.g. @descope/node-sdk 1.6.3
+        - How Rescope runs: e.g. v0.1.0 binary on port 4600, seed file yes/no
+        - Project ID / base URL the SDK is pointed at
+    validations:
+      required: true
+  - type: textarea
+    id: interaction
+    attributes:
+      label: Exactly how you call the Descope API
+      description: The precise SDK call(s) or raw HTTP request — method, path, headers (redact secrets/tokens), and body — plus the response you received (status code + body).
+      placeholder: |
+        Request:
+          POST /v1/auth/otp/verify/email
+          Authorization: Bearer <projectId>:<token>
+          { "loginId": "a@b.com", "code": "123456" }
+
+        Response:
+          HTTP 400
+          { "errorCode": "E0...", "errorDescription": "..." }
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Minimal, numbered steps. A curl sequence or a short snippet is ideal.
+      placeholder: |
+        1. Start the emulator: ./rescope
+        2. curl -s http://localhost:4600/... -d '{...}'
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs. actual behavior
+      description: What real Descope does versus what Rescope did. Include status codes and response bodies.
+    validations:
+      required: true
+  - type: dropdown
+    id: real-descope
+    attributes:
+      label: Verified against real Descope?
+      description: Does the same call behave correctly against the real Descope cloud?
+      options:
+        - "Yes — it works on real Descope and differs on Rescope"
+        - "No — I have not checked against real Descope"
+        - "Not applicable"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Emulator logs
+      description: Re-run with `RUST_LOG=debug ./rescope` and paste the relevant output.
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: Rescope version & OS
+      placeholder: "e.g. v0.1.0, macOS 14 / Ubuntu 22.04"
+    validations:
+      required: true

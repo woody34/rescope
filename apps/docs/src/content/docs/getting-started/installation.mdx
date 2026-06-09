@@ -1,0 +1,69 @@
+---
+title: Installation
+description: Install and run Rescope locally.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+Rescope is a single Rust binary with no external dependencies. The easiest way to run it is with Docker or from a pre-built binary.
+
+## Quick Start
+
+<Tabs>
+  <TabItem label="npm (global)">
+  ```bash
+  npm install -g rescope
+  rescope
+  ```
+  </TabItem>
+  <TabItem label="Docker">
+  ```bash
+  docker run -p 4600:4600 ghcr.io/descope/rescope:latest
+  ```
+  </TabItem>
+  <TabItem label="Binary">
+  Download the latest release from [GitHub Releases](https://github.com/descope/rescope/releases) and run:
+  ```bash
+  chmod +x rescope
+  ./rescope
+  ```
+  </TabItem>
+  <TabItem label="From source">
+  ```bash
+  git clone https://github.com/descope/rescope
+  cd rescope
+  cargo run
+  ```
+  You'll need [Rust](https://rustup.rs/) installed.
+  </TabItem>
+</Tabs>
+
+## Verify it's running
+
+Once started, Rescope listens on port 4600 by default. Check the health endpoint:
+
+```bash
+curl http://localhost:4600/health
+# → {"ok":true}
+```
+
+The Admin UI is available at **http://localhost:5173** when running in development mode (`npm run dev`).
+
+## Point your app at Rescope
+
+Set the `DESCOPE_BASE_URL` environment variable (or SDK equivalent) to point at Rescope:
+
+```bash
+DESCOPE_BASE_URL=http://localhost:4600 node your-app.js
+```
+
+For the Descope Node SDK:
+
+```typescript
+import DescopeClient from '@descope/node-sdk';
+
+const client = DescopeClient({
+  projectId: 'your-project-id',   // any value works in emulation mode
+  baseURL: 'http://localhost:4600',
+});
+```

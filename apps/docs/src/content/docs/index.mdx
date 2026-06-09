@@ -1,0 +1,36 @@
+---
+title: Rescope
+description: A local Descope emulator for offline development and testing.
+template: splash
+hero:
+  tagline: Local Descope emulator — auth flows, offline, no limits.
+  image:
+    file: ../../assets/logo.svg
+  actions:
+    - text: Get Started
+      link: /getting-started/introduction/
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/descope/rescope
+      icon: external
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+## What is Rescope?
+
+<CardGrid stagger>
+  <Card title="Fully Offline" icon="approve-check">
+    Run authentication flows without any internet connection. No Descope account required for development.
+  </Card>
+  <Card title="Zero Config" icon="rocket">
+    Start with `npx rescope` and point your Descope SDK at `localhost:4600`. Everything just works.
+  </Card>
+  <Card title="Emulator API" icon="puzzle">
+    Retrieve OTP codes, reset state, and snapshot/restore the emulator — perfect for test automation.
+  </Card>
+  <Card title="Admin UI" icon="laptop">
+    Manage users, tenants, roles, and access keys through a local web interface.
+  </Card>
+</CardGrid>

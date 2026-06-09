@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rescope Playground</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; }
+    body { font-family: 'Inter', 'SF Pro', system-ui, sans-serif; background: #0a0a0f; color: #e0e0e0; }
+
+    /* Loading overlay */
+    #loading {
+      position: fixed; inset: 0; z-index: 1000;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: #0a0a0f;
+      transition: opacity 0.4s ease;
+    }
+    #loading.hidden { opacity: 0; pointer-events: none; }
+    .loader { width: 48px; height: 48px; border: 3px solid #222; border-top-color: #39ff14;
+              border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 1.5rem; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading h2 { color: #39ff14; font-size: 1.2rem; font-weight: 500; margin-bottom: 0.5rem; }
+    #status { color: #888; font-size: 0.85rem; }
+
+    /* Playground frame */
+    #playground {
+      position: fixed; inset: 0;
+      border: none; width: 100%; height: 100%;
+      display: none;
+    }
+    #playground.active { display: block; }
+
+    /* Error state */
+    #error { display: none; text-align: center; padding: 3rem; }
+    #error.visible { display: block; }
+    #error h2 { color: #ff4444; margin-bottom: 1rem; }
+    #error p { color: #888; max-width: 400px; margin: 0 auto; }
+    #error button { margin-top: 1.5rem; background: #1a1a2e; color: #39ff14; border: 1px solid #39ff14;
+                    padding: 0.6rem 1.5rem; border-radius: 6px; cursor: pointer; font-size: 0.9rem; }
+
+    /* Console (bottom panel) */
+    #console-toggle {
+      position: fixed; bottom: 0; right: 20px; z-index: 1001;
+      background: #1a1a2e; color: #39ff14; border: 1px solid #333; border-bottom: none;
+      padding: 4px 16px; border-radius: 6px 6px 0 0; cursor: pointer; font-family: monospace; font-size: 0.75rem;
+    }
+    #console-panel {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 1000; height: 200px;
+      background: #111; border-top: 1px solid #333; font-family: monospace; font-size: 0.75rem;
+      overflow-y: auto; padding: 0.5rem; display: none;
+    }
+    #console-panel.open { display: block; }
+    #console-panel .entry { margin-bottom: 2px; }
+    .entry.req { color: #888; }
+    .entry.res-ok { color: #39ff14; }
+    .entry.res-err { color: #ff4444; }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <div class="loader"></div>
+    <h2>Rescope Playground</h2>
+    <div id="status">Initializing WASM emulator...</div>
+  </div>
+
+  <iframe id="playground"></iframe>
+
+  <div id="error">
+    <h2>❌ Failed to initialize</h2>
+    <p id="error-msg"></p>
+    <button onclick="location.reload()">Retry</button>
+  </div>
+
+  <div id="console-toggle" onclick="toggleConsole()">▲ Console</div>
+  <div id="console-panel"></div>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const loadingEl = document.getElementById('loading');
+    const playgroundEl = document.getElementById('playground');
+    const errorEl = document.getElementById('error');
+    const errorMsgEl = document.getElementById('error-msg');
+    const consoleEl = document.getElementById('console-panel');
+
+    function setStatus(msg) { statusEl.textContent = msg; }
+
+    function toggleConsole() {
+      consoleEl.classList.toggle('open');
+    }
+
+    function consoleLog(msg, type = 'req') {
+      const entry = document.createElement('div');
+      entry.className = `entry ${type}`;
+      entry.textContent = `[${new Date().toISOString().slice(11, 19)}] ${msg}`;
+      consoleEl.prepend(entry);
+    }
+
+    async function init() {
+      if (!('serviceWorker' in navigator)) {
+        showError('Service workers are not supported in this browser');
+        return;
+      }
+
+      try {
+        // 1. Register service worker
+        setStatus('Registering service worker...');
+        const reg = await navigator.serviceWorker.register('/sw.js');
+        consoleLog('Service worker registered');
+
+        // 2. Wait for activation
+        setStatus('Loading WASM module...');
+        await new Promise((resolve, reject) => {
+          if (reg.active) return resolve();
+          const sw = reg.installing || reg.waiting;
+          if (!sw) return reject(new Error('No service worker found'));
+          sw.addEventListener('statechange', () => {
+            if (sw.state === 'activated') resolve();
+            if (sw.state === 'redundant') reject(new Error('SW became redundant'));
+          });
+        });
+
+        // 3. Wait for clients.claim()
+        await new Promise(r => setTimeout(r, 300));
+
+        // 4. Health check
+        setStatus('Verifying WASM emulator...');
+        const healthRes = await fetch('/health');
+        const health = await healthRes.json();
+
+        if (!health.wasm) {
+          throw new Error('Health check did not return wasm=true');
+        }
+
+        consoleLog(`Health: ${JSON.stringify(health)}`, 'res-ok');
+        setStatus('Ready!');
+
+        // 5. Show the admin UI
+        setTimeout(() => {
+          loadingEl.classList.add('hidden');
+          playgroundEl.src = '/ui/';
+          playgroundEl.classList.add('active');
+          consoleLog('Admin UI loaded', 'res-ok');
+        }, 500);
+
+      } catch (e) {
+        showError(e.message);
+        consoleLog(`Error: ${e.message}`, 'res-err');
+      }
+    }
+
+    function showError(msg) {
+      loadingEl.style.display = 'none';
+      errorMsgEl.textContent = msg;
+      errorEl.classList.add('visible');
+    }
+
+    init();
+  </script>
+</body>
+</html>

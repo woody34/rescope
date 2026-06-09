@@ -1,0 +1,36 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "api",
+  "projectType": "application",
+  "sourceRoot": "apps/api/src",
+  "targets": {
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": { "command": "cargo run --features dev-ui" }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": { "command": "cargo build" }
+    },
+    "build-release": {
+      "executor": "nx:run-commands",
+      "options": { "command": "cargo build --release" }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": { "command": "cargo test --lib" }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": { "command": "cargo clippy -- -D warnings" }
+    },
+    "format": {
+      "executor": "nx:run-commands",
+      "options": { "command": "cargo fmt" }
+    },
+    "format-check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "cargo fmt --check" }
+    }
+  }
+}

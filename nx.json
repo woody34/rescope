@@ -1,0 +1,29 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "defaultBase": "main",
+  "namedInputs": {
+    "default": ["{projectRoot}/**/*", "sharedGlobals"],
+    "sharedGlobals": ["{workspaceRoot}/Cargo.toml", "{workspaceRoot}/Cargo.lock"],
+    "rustSource":    ["{workspaceRoot}/apps/api/src/**/*", "{workspaceRoot}/apps/api/Cargo.toml"],
+    "uiSource":      ["{workspaceRoot}/apps/ui/src/**/*", "{workspaceRoot}/apps/ui/package.json"]
+  },
+  "targetDefaults": {
+    "build": {
+      "cache": true,
+      "inputs": ["default"]
+    },
+    "test": {
+      "cache": true,
+      "inputs": ["default"]
+    },
+    "lint": {
+      "cache": true,
+      "inputs": ["default"]
+    },
+    "format:check": {
+      "cache": true,
+      "inputs": ["default"]
+    }
+  },
+  "plugins": []
+}

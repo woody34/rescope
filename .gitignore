@@ -1,0 +1,11 @@
+target
+**/node_modules
+**/test-results
+.coverage
+target/cov-build
+.nx
+**/playwright-report
+.env
+**/.env
+dist
+.claude/settings.json

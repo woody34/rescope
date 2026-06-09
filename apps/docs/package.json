@@ -1,0 +1,23 @@
+{
+  "name": "apps-docs",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "astro dev",
+    "start": "astro dev",
+    "build": "astro build",
+    "build:wasm": "wasm-pack build ../../apps/rescope-wasm --target no-modules --out-dir ../../apps/docs/public/wasm --no-pack && node -e \"const fs=require('fs'),f='public/demo-sw.js',c=fs.readFileSync(f,'utf8').replace(/const SW_BUILD_TS = \\\\d+;/,'const SW_BUILD_TS = '+Date.now()+';');fs.writeFileSync(f,c);console.log('[stamp] demo-sw.js stamped')\"",
+    "preview": "astro preview",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/react": "^5.0.0",
+    "@astrojs/starlight": "^0.38.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "astro": "^6.0.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "sharp": "^0.34.2"
+  }
+}

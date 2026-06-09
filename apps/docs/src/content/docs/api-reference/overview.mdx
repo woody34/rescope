@@ -1,0 +1,76 @@
+---
+title: API Reference
+description: Complete Rescope API surface — compatible with the Descope HTTP API.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Rescope implements the Descope HTTP API. Any client that speaks to `api.descope.com` can be pointed at `localhost:4600` with no code changes.
+
+## Interactive Reference
+
+When Rescope is running, an interactive Swagger UI is available:
+
+**[http://localhost:4600/docs](http://localhost:4600/docs)**
+
+It covers every emulated endpoint with request/response schemas and a "Try it" interface.
+
+<Aside type="tip">
+  The raw OpenAPI spec JSON is at `http://localhost:4600/openapi.json`. You can import it into Postman, Insomnia, or any OpenAPI-compatible tool.
+</Aside>
+
+## Authentication
+
+Management API endpoints require a Bearer token:
+
+```
+Authorization: Bearer <RESCOPE_MANAGEMENT_KEY>
+```
+
+Auth endpoints (OTP, magic links, password, session) do not require a management key.
+
+## Emulated API Surface
+
+### Auth
+
+| Category | Endpoints |
+|---|---|
+| OTP | Sign up, sign in, verify (email + SMS) |
+| Magic Link | Sign up, sign in, verify, update email |
+| Password | Sign up, sign in, reset, replace, update, policy |
+| Session | Refresh, validate, logout, me |
+| SAML/SSO | Authorize, exchange |
+
+### Management
+
+| Category | Endpoints |
+|---|---|
+| Users | Full CRUD, batch create/delete, status, roles, tenant membership |
+| Tenants | Create, update, delete, search |
+| Roles | Create, update, delete, list |
+| Permissions | Create, update, delete, list |
+| Access Keys | Create, disable, delete, list |
+| JWT Templates | Create, update, delete, set active |
+| Connectors | Create, update, delete, list |
+| Custom Attributes | Create, delete, list |
+| Auth Method Config | Get, update |
+
+### Emulator Escape Hatches
+
+These endpoints are unique to Rescope (not in the production Descope API):
+
+| Endpoint | Description |
+|---|---|
+| `GET /emulator/otp/:loginId` | Retrieve the pending OTP or magic link token |
+| `GET /emulator/otps` | List all pending OTP codes |
+| `POST /emulator/reset` | Reset all state (re-applies seed if configured) |
+| `GET /emulator/snapshot` | Export current state as JSON |
+| `POST /emulator/snapshot` | Import state from JSON |
+| `GET /health` | Health check |
+
+## Not yet emulated
+
+- Enchanted links
+- Social OAuth flows
+- TOTP / Authenticator apps
+- Passkeys / WebAuthn

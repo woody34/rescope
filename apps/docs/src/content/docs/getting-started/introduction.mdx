@@ -1,0 +1,33 @@
+---
+title: Introduction
+description: What Rescope is and why you'd use it.
+---
+
+Rescope is a local [Descope](https://www.descope.com) emulator that lets you build and test authentication flows entirely offline — no internet connection, no real Descope project required.
+
+## What is Rescope?
+
+Rescope runs as a lightweight HTTP server that speaks the Descope API protocol. Your app authenticates against `localhost:4600` instead of `api.descope.com`. Everything works — OTP flows, magic links, password auth, session tokens, JWTs, management APIs — all emulated locally.
+
+## Why use it?
+
+- **Offline development** — Build auth flows on a plane, in a basement, anywhere
+- **Fast CI** — Integration tests that don't hit a remote service; no rate limits, no flakiness
+- **Reproducible state** — Seed users and tenants with a JSON file; reset on demand
+- **Safe experimentation** — Try management API operations without touching production data
+
+## How it works
+
+```
+Your App ──→ localhost:4600 (Rescope) ──→ in-memory store
+                              ↑
+                   Rescope Admin UI (localhost:5173)
+```
+
+Rescope implements the Descope HTTP API surface. Your existing Descope SDK configuration points at `localhost:4600` instead of the real endpoint. The Admin UI lets you inspect and manage state while you develop.
+
+## What's next
+
+- [Installation](/getting-started/installation) — Get up and running in 2 minutes
+- [Configuration](/getting-started/configuration) — Environment variables and seed files
+- [OTP Authentication Guide](/guides/otp-authentication) — Walk through a complete auth flow

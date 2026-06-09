@@ -1,0 +1,68 @@
+{
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "name": "nestjs-angular-sample",
+  "projectType": "application",
+  "implicitDependencies": ["api"],
+  "targets": {
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "cargo run",
+          "npm run start:dev --prefix apps/nestjs-angular-sample/backend",
+          "npm start --prefix apps/nestjs-angular-sample/frontend"
+        ],
+        "parallel": true,
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "serve-emulator": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "cargo run",
+        "cwd": "{workspaceRoot}"
+      }
+    },
+    "serve-backend": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npm run start:dev",
+        "cwd": "apps/nestjs-angular-sample/backend"
+      }
+    },
+    "serve-frontend": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npm run serve:e2e",
+        "cwd": "apps/nestjs-angular-sample/frontend"
+      }
+    },
+    "build-backend": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npm run build",
+        "cwd": "apps/nestjs-angular-sample/backend"
+      },
+      "outputs": [
+        "{workspaceRoot}/apps/nestjs-angular-sample/backend/dist"
+      ]
+    },
+    "build-frontend": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npm run build",
+        "cwd": "apps/nestjs-angular-sample/frontend"
+      },
+      "outputs": [
+        "{workspaceRoot}/apps/nestjs-angular-sample/frontend/dist"
+      ]
+    },
+    "e2e": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npx playwright test --config=playwright.config.ts",
+        "cwd": "apps/nestjs-angular-sample"
+      }
+    }
+  }
+}

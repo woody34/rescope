@@ -1,0 +1,147 @@
+/* Rescope dark hacker aesthetic for Starlight */
+
+:root {
+  --sl-color-accent-low: #0d2a0d;
+  --sl-color-accent: #39ff14;
+  --sl-color-accent-high: #9fff7e;
+  --sl-color-white: #f0f0f0;
+  --sl-color-gray-1: #c8c8c8;
+  --sl-color-gray-2: #a0a0a0;
+  --sl-color-gray-3: #606060;
+  --sl-color-gray-4: #2c2c2c;
+  --sl-color-gray-5: #1a1a1a;
+  --sl-color-gray-6: #111111;
+  --sl-color-black: #0a0a0f;
+  --sl-color-bg: #0a0a0f;
+  --sl-color-bg-nav: #0d0d14;
+  --sl-color-bg-sidebar: #0d0d14;
+  --sl-color-text: #e0e0e0;
+  --sl-color-text-accent: #39ff14;
+  --sl-font: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', ui-monospace, monospace;
+  --sl-font-system: 'Inter', 'SF Pro Display', system-ui, sans-serif;
+  --sl-text-h1: 2.5rem;
+  --sl-text-h2: 1.75rem;
+  --sl-text-h3: 1.3rem;
+}
+
+/* Body text uses system font; headings / code use mono */
+body {
+  font-family: var(--sl-font-system);
+  background: var(--sl-color-black);
+}
+
+h1, h2, h3, h4, h5, h6,
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3 {
+  font-family: var(--sl-font);
+  letter-spacing: -0.02em;
+}
+
+/* Neon accent on heading links */
+h1, h2, h3 {
+  color: var(--sl-color-white);
+}
+
+/* Sidebar brand + nav */
+.site-title {
+  font-family: var(--sl-font);
+  font-weight: 700;
+  color: var(--sl-color-accent) !important;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Nav links */
+.sidebar-content a {
+  font-family: var(--sl-font-system);
+  font-size: 0.85rem;
+}
+
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover {
+  color: var(--sl-color-accent);
+  background: rgba(57, 255, 20, 0.08);
+  border-left: 2px solid var(--sl-color-accent);
+}
+
+/* Code blocks — terminal feel */
+pre,
+code {
+  font-family: var(--sl-font) !important;
+  border-radius: 6px;
+}
+
+pre {
+  border: 1px solid #222;
+  background: #0d0d0d !important;
+}
+
+/* Inline code */
+:not(pre) > code {
+  background: #1a1a2e;
+  color: var(--sl-color-accent);
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  font-size: 0.875em;
+}
+
+/* Callout/aside — neon left border */
+.starlight-aside {
+  border-left-color: var(--sl-color-accent);
+  background: rgba(57, 255, 20, 0.04);
+}
+
+/* Table of contents links */
+.right-sidebar-panel a {
+  font-size: 0.8rem;
+}
+
+/* Neon focus ring */
+:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 3px;
+}
+
+/* Search box */
+site-search .sl-flex input {
+  background: #111;
+  border-color: #333;
+  color: var(--sl-color-text);
+}
+
+/* Top nav border */
+header.header {
+  border-bottom: 1px solid #1e1e1e;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track { background: #0a0a0f; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #39ff14; }
+
+/* ── Demo page ──────────────────────────────────────────────── */
+
+/* Full-width content area on demo/playground pages */
+.sl-markdown-content {
+  max-width: 100%;
+}
+
+/* Input focus — neon green ring */
+.demo-input:focus,
+input:focus {
+  border-color: #39ff14 !important;
+  box-shadow: 0 0 0 2px rgba(57,255,20,0.15) !important;
+}
+
+/* Responsive two-panel: stack on narrow screens */
+@media (max-width: 800px) {
+  .demo-panels {
+    grid-template-columns: 1fr !important;
+  }
+}
+

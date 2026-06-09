@@ -1,0 +1,84 @@
+---
+title: User Management
+description: Create, update, search and delete users via the Rescope Management API.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+The Rescope Management API mirrors the Descope Management API. All endpoints require a Bearer token set to your `RESCOPE_MANAGEMENT_KEY`.
+
+```bash
+curl -H "Authorization: Bearer $RESCOPE_MANAGEMENT_KEY" \
+  http://localhost:4600/v1/mgmt/user/search -X POST -d '{}'
+```
+
+## Create a user
+
+```bash
+curl -X POST http://localhost:4600/v1/mgmt/user/create \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $RESCOPE_MANAGEMENT_KEY" \
+  -d '{
+    "loginId": "bob@example.com",
+    "email": "bob@example.com",
+    "name": "Bob",
+    "roleNames": ["editor"],
+    "userTenants": [{"tenantId": "acme", "roleNames": ["member"]}]
+  }'
+```
+
+## Search users
+
+```bash
+curl -X POST http://localhost:4600/v1/mgmt/user/search \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $RESCOPE_MANAGEMENT_KEY" \
+  -d '{}' | jq '.users[].email'
+```
+
+## Update a user
+
+```bash
+curl -X POST http://localhost:4600/v1/mgmt/user/update \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $RESCOPE_MANAGEMENT_KEY" \
+  -d '{"loginId": "bob@example.com", "name": "Robert"}'
+```
+
+## Delete a user
+
+```bash
+curl -X POST http://localhost:4600/v1/mgmt/user/delete \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $RESCOPE_MANAGEMENT_KEY" \
+  -d '{"loginId": "bob@example.com"}'
+```
+
+<Aside type="tip">
+  Use the Admin UI at `http://localhost:5173` to manage users visually without curl commands.
+</Aside>
+
+## Batch operations
+
+```bash
+# Create many users at once
+curl -X POST http://localhost:4600/v1/mgmt/user/create/batch \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $RESCOPE_MANAGEMENT_KEY" \
+  -d '{
+    "users": [
+      {"loginId": "u1@example.com", "email": "u1@example.com"},
+      {"loginId": "u2@example.com", "email": "u2@example.com"}
+    ]
+  }'
+```
+
+## Status management
+
+```bash
+# Disable a user
+curl -X POST http://localhost:4600/v1/mgmt/user/status \
+  -H "Authorization: Bearer $RESCOPE_MANAGEMENT_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"loginId": "bob@example.com", "status": "disabled"}'
+```
