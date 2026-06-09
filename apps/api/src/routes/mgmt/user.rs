@@ -114,6 +114,11 @@ pub(crate) async fn create_user_impl(
     } else {
         new_user_id()
     };
+    // Real Descope cannot mark a phone verified when there is no phone, so a
+    // verifiedPhone:true flag with no phone number is ignored (defaults to
+    // unverified). Without this the emulator reported phone-less test users as
+    // phone-verified, so the mobile app skipped its phone-verification screen.
+    let phone_present = req.phone.as_deref().is_some_and(|p| !p.trim().is_empty());
     let mut user = User {
         user_id,
         login_ids: vec![login_id.clone()],
@@ -127,7 +132,7 @@ pub(crate) async fn create_user_impl(
         role_names: req.role_names.unwrap_or_default(),
         custom_attributes: req.custom_attributes.unwrap_or_default(),
         verified_email: req.verified_email.unwrap_or(false),
-        verified_phone: req.verified_phone.unwrap_or(false),
+        verified_phone: req.verified_phone.unwrap_or(false) && phone_present,
         status: "invited".into(),
         created_time: now(),
         _is_test_user: is_test || req.test,
@@ -880,6 +885,54 @@ mod tests {
         uid
     }
 
+    // ─── create_user_impl: phone-verified semantics ───
+
+    #[tokio::test]
+    async fn create_user_ignores_verified_phone_without_a_phone() {
+        // Real Descope cannot verify a phone that does not exist, so a
+        // verifiedPhone:true flag with no phone number must default to unverified.
+        let state = make_state().await;
+        let _ = create_user_impl(
+            &state,
+            CreateUserRequest {
+                login_id: Some("nophone@test.com".into()),
+                email: Some("nophone@test.com".into()),
+                verified_phone: Some(true),
+                phone: None,
+                ..Default::default()
+            },
+            true,
+            false,
+        )
+        .await
+        .unwrap();
+        let users = state.users.read().await;
+        let user = users.load("nophone@test.com").unwrap();
+        assert!(!user.verified_phone, "phone-less user must not be phone-verified");
+    }
+
+    #[tokio::test]
+    async fn create_user_honors_verified_phone_with_a_phone() {
+        let state = make_state().await;
+        let _ = create_user_impl(
+            &state,
+            CreateUserRequest {
+                login_id: Some("withphone@test.com".into()),
+                email: Some("withphone@test.com".into()),
+                phone: Some("+15555550100".into()),
+                verified_phone: Some(true),
+                ..Default::default()
+            },
+            true,
+            false,
+        )
+        .await
+        .unwrap();
+        let users = state.users.read().await;
+        let user = users.load("withphone@test.com").unwrap();
+        assert!(user.verified_phone, "user with a phone + verifiedPhone:true must be verified");
+    }
+
     // ─── generate_otp_for_test_user ───
 
     #[tokio::test]
@@ -934,7 +987,7 @@ mod tests {
             })
         };
         // First create succeeds.
-        create_test(State(state.clone()), make_headers(&state), req())
+        let _ = create_test(State(state.clone()), make_headers(&state), req())
             .await
             .unwrap();
         // Re-creating the same loginId (a Playwright retry re-running e2e setup,
@@ -1188,10 +1241,6 @@ pub async fn update_name(
 pub struct UpdatePhoneFieldRequest {
     pub login_id: String,
     pub phone: String,
-    /// Real Descope's updatePhone sets the phone's verified status. Honor it so
-    /// callers can provision an unverified phone (e.g. e2e phone-verification
-    /// flows). Absent → leave verified_phone unchanged.
-    pub verified: Option<bool>,
 }
 
 pub async fn update_phone_field(
@@ -1205,7 +1254,6 @@ pub async fn update_phone_field(
         &req.login_id,
         UserPatch {
             phone: Some(req.phone),
-            verified_phone: req.verified,
             ..Default::default()
         },
     )?;

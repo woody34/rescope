@@ -511,7 +511,7 @@ mod tests {
         store::idp_store::{IdpEmulator, IdpProtocol},
         types::{OidcConfig, Tenant, User, UserTenant},
     };
-    use axum::extract::{Path as AxumPath, Query as AxumQuery, State as AxumState};
+    use axum::extract::{Path as AxumPath, State as AxumState};
 
     async fn make_state() -> EmulatorState {
         EmulatorState::new(&EmulatorConfig::default())
