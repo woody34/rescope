@@ -147,7 +147,10 @@ pub async fn create_tenant(
 mod tests {
     use super::*;
     use crate::{
-        config::EmulatorConfig, state::EmulatorState, store::user_store::new_user_id, types::User,
+        config::EmulatorConfig,
+        state::EmulatorState,
+        store::user_store::new_user_id,
+        types::{TokenType, User},
     };
 
     async fn make_state() -> EmulatorState {
@@ -197,5 +200,31 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, EmulatorError::InvalidToken));
+    }
+
+    #[tokio::test]
+    async fn reset_preserves_in_flight_magic_link_tokens() {
+        // Why: parallel test shards share one emulator process. A /emulator/reset
+        // issued by one shard must not destroy a magic-link token another shard
+        // just minted and is about to verify — otherwise verify fails with a
+        // flaky "Failed to load magic link token" (token not found).
+        let state = make_state().await;
+        state.tokens.write().await.insert(
+            "in-flight-token".into(),
+            "user-1".into(),
+            TokenType::Magic,
+        );
+
+        // A concurrent test-isolation reset runs.
+        reset(State(state.clone())).await;
+
+        // The in-flight token must still be verifiable after the reset.
+        let entry = state
+            .tokens
+            .write()
+            .await
+            .consume("in-flight-token")
+            .expect("magic-link token must survive /emulator/reset");
+        assert_eq!(entry.user_id, "user-1");
     }
 }
