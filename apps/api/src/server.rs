@@ -240,6 +240,12 @@ pub fn build_router(state: EmulatorState) -> Router {
             "/v2/mgmt/user/search",
             post(crate::routes::mgmt::user::search),
         )
+        // ── Mgmt: Project ─────────────────────────────────────────────
+        // SDK `management.project.exportSnapshot()` posts here.
+        .route(
+            "/v1/mgmt/project/snapshot/export",
+            post(crate::routes::mgmt::project::export_snapshot),
+        )
         .route(
             "/v1/mgmt/user/update",
             post(crate::routes::mgmt::user::update),
