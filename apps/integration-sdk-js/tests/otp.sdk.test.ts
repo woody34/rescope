@@ -192,7 +192,7 @@ const PHONE = "+15550001234";
 const PHONE2 = "+15550005678";
 
 async function otpSignupPhone(phone: string) {
-  const res = await fetch(`${BASE_URL}/v1/auth/otp/signup/phone/sms`, {
+  const res = await fetch(`${BASE_URL}/v1/auth/otp/signup/sms`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ loginId: phone }),
@@ -201,7 +201,7 @@ async function otpSignupPhone(phone: string) {
 }
 
 async function otpSigninPhone(phone: string) {
-  const res = await fetch(`${BASE_URL}/v1/auth/otp/signin/phone/sms`, {
+  const res = await fetch(`${BASE_URL}/v1/auth/otp/signin/sms`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ loginId: phone }),
@@ -210,7 +210,7 @@ async function otpSigninPhone(phone: string) {
 }
 
 async function otpVerifyPhone(phone: string, code: string) {
-  const res = await fetch(`${BASE_URL}/v1/auth/otp/verify/phone/sms`, {
+  const res = await fetch(`${BASE_URL}/v1/auth/otp/verify/sms`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ loginId: phone, code }),
@@ -218,7 +218,7 @@ async function otpVerifyPhone(phone: string, code: string) {
   return { status: res.status, body: await res.json() as Record<string, unknown> };
 }
 
-describe("POST /v1/auth/otp/signup/phone/sms", () => {
+describe("POST /v1/auth/otp/signup/sms", () => {
   it("creates user with phone and returns maskedPhone + code", async () => {
     const { status, body } = await otpSignupPhone(PHONE);
     expect(status).toBe(200);
@@ -234,7 +234,7 @@ describe("POST /v1/auth/otp/signup/phone/sms", () => {
   });
 });
 
-describe("POST /v1/auth/otp/signin/phone/sms", () => {
+describe("POST /v1/auth/otp/signin/sms", () => {
   it("returns code for existing phone user", async () => {
     await otpSignupPhone(PHONE);
     const { status, body } = await otpSigninPhone(PHONE);
@@ -248,7 +248,7 @@ describe("POST /v1/auth/otp/signin/phone/sms", () => {
   });
 });
 
-describe("POST /v1/auth/otp/verify/phone/sms", () => {
+describe("POST /v1/auth/otp/verify/sms", () => {
   it("full round-trip: signup → escape-hatch → verify → tokens", async () => {
     await otpSignupPhone(PHONE);
     const { body: otpBody } = await getEmulatorOtp(PHONE);

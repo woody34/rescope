@@ -28,11 +28,11 @@ description: Map of every Descope feature to its Rescope implementation across t
 | Descope Feature | Endpoint | API | WASM | Location |
 |---|---|:---:|:---:|---|
 | Sign up (email) | `POST /v1/auth/otp/signup/email` | ✅ | ❌ | [otp.rs](file:///Users/mattwoodruff/repos/descope-emulator/apps/api/src/routes/auth/otp.rs) |
-| Sign up (SMS) | `POST /v1/auth/otp/signup/phone/sms` | ✅ | ❌ | [otp.rs](file:///Users/mattwoodruff/repos/descope-emulator/apps/api/src/routes/auth/otp.rs) |
+| Sign up (SMS) | `POST /v1/auth/otp/signup/sms` | ✅ | ❌ | [otp.rs](file:///Users/mattwoodruff/repos/descope-emulator/apps/api/src/routes/auth/otp.rs) |
 | Sign in (email) | `POST /v1/auth/otp/signin/email` | ✅ | ✅ | [otp.rs](file:///Users/mattwoodruff/repos/descope-emulator/apps/api/src/routes/auth/otp.rs) · [lib.rs](file:///Users/mattwoodruff/repos/descope-emulator/apps/rescope-wasm/src/lib.rs) |
-| Sign in (SMS) | `POST /v1/auth/otp/signin/phone/sms` | ✅ | ❌ | [otp.rs](file:///Users/mattwoodruff/repos/descope-emulator/apps/api/src/routes/auth/otp.rs) |
+| Sign in (SMS) | `POST /v1/auth/otp/signin/sms` | ✅ | ❌ | [otp.rs](file:///Users/mattwoodruff/repos/descope-emulator/apps/api/src/routes/auth/otp.rs) |
 | Verify (email) | `POST /v1/auth/otp/verify/email` | ✅ | ✅ | [otp.rs](file:///Users/mattwoodruff/repos/descope-emulator/apps/api/src/routes/auth/otp.rs) · [lib.rs](file:///Users/mattwoodruff/repos/descope-emulator/apps/rescope-wasm/src/lib.rs) |
-| Verify (SMS) | `POST /v1/auth/otp/verify/phone/sms` | ✅ | ❌ | [otp.rs](file:///Users/mattwoodruff/repos/descope-emulator/apps/api/src/routes/auth/otp.rs) |
+| Verify (SMS) | `POST /v1/auth/otp/verify/sms` | ✅ | ❌ | [otp.rs](file:///Users/mattwoodruff/repos/descope-emulator/apps/api/src/routes/auth/otp.rs) |
 | Sign-up-in (email) | `POST /v1/auth/otp/signup-in/email` | ✅ | ❌ | [otp.rs](file:///Users/mattwoodruff/repos/descope-emulator/apps/api/src/routes/auth/otp.rs) |
 | Sign-up-in (SMS) | `POST /v1/auth/otp/signup-in/sms` | ✅ | ❌ | [otp.rs](file:///Users/mattwoodruff/repos/descope-emulator/apps/api/src/routes/auth/otp.rs) |
 | Update phone | `POST /v1/auth/otp/update/phone/sms` | ✅ | ❌ | [otp.rs](file:///Users/mattwoodruff/repos/descope-emulator/apps/api/src/routes/auth/otp.rs) |
