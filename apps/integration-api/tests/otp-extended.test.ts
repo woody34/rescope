@@ -71,7 +71,7 @@ describe("POST /v1/auth/otp/signup-in/sms", () => {
   it("sends OTP to existing phone user without creating a duplicate", async () => {
     const phone = "+15550004444";
     // Create via regular signup first
-    await client.post("/v1/auth/otp/signup/phone/sms", { loginId: phone });
+    await client.post("/v1/auth/otp/signup/sms", { loginId: phone });
 
     const res = await client.post("/v1/auth/otp/signup-in/sms", { loginId: phone });
     expect(res.status).toBe(200);
@@ -82,7 +82,7 @@ describe("POST /v1/auth/otp/signup-in/sms", () => {
     await client.post("/v1/auth/otp/signup-in/sms", { loginId: phone });
 
     const { code } = await getEmulatorOtp(phone);
-    const verifyRes = await client.post("/v1/auth/otp/verify/phone/sms", { loginId: phone, code });
+    const verifyRes = await client.post("/v1/auth/otp/verify/sms", { loginId: phone, code });
     expect(verifyRes.status).toBe(200);
     const body = await verifyRes.json() as { sessionJwt: string };
     expect(body.sessionJwt.split(".").length).toBe(3);

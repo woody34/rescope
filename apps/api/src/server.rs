@@ -150,7 +150,7 @@ pub fn build_router(state: EmulatorState) -> Router {
             post(crate::routes::auth::otp::signup_email),
         )
         .route(
-            "/v1/auth/otp/signup/phone/sms",
+            "/v1/auth/otp/signup/sms",
             post(crate::routes::auth::otp::signup_phone_sms),
         )
         .route(
@@ -158,7 +158,7 @@ pub fn build_router(state: EmulatorState) -> Router {
             post(crate::routes::auth::otp::signin_email),
         )
         .route(
-            "/v1/auth/otp/signin/phone/sms",
+            "/v1/auth/otp/signin/sms",
             post(crate::routes::auth::otp::signin_phone_sms),
         )
         .route(
@@ -166,7 +166,7 @@ pub fn build_router(state: EmulatorState) -> Router {
             post(crate::routes::auth::otp::verify_email),
         )
         .route(
-            "/v1/auth/otp/verify/phone/sms",
+            "/v1/auth/otp/verify/sms",
             post(crate::routes::auth::otp::verify_phone_sms),
         )
         .route(

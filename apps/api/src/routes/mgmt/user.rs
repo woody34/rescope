@@ -1188,6 +1188,10 @@ pub async fn update_name(
 pub struct UpdatePhoneFieldRequest {
     pub login_id: String,
     pub phone: String,
+    /// Real Descope's updatePhone sets the phone's verified status. Honor it so
+    /// callers can provision an unverified phone (e.g. e2e phone-verification
+    /// flows). Absent → leave verified_phone unchanged.
+    pub verified: Option<bool>,
 }
 
 pub async fn update_phone_field(
@@ -1201,6 +1205,7 @@ pub async fn update_phone_field(
         &req.login_id,
         UserPatch {
             phone: Some(req.phone),
+            verified_phone: req.verified,
             ..Default::default()
         },
     )?;
