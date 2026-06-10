@@ -32,6 +32,9 @@ pub struct CreateUserRequest {
     pub login_id: Option<String>,
     /// Array form — UI sends `loginIds: [...]`, we use the first element
     pub login_ids: Option<Vec<String>>,
+    /// Extra sign-in identifiers registered alongside the primary loginId
+    /// (Descope `additionalLoginIds`) — e.g. the user's phone number.
+    pub additional_login_ids: Option<Vec<String>>,
     pub email: Option<String>,
     pub phone: Option<String>,
     // Accept both 'name' (legacy) and 'displayName' (Node SDK field)
@@ -96,6 +99,23 @@ pub(crate) async fn create_user_impl(
         })
         .map(|e| e.to_lowercase());
 
+    // Register additionalLoginIds as real sign-in identifiers alongside the
+    // primary loginId, matching Descope (emails lowercased like the primary).
+    let mut login_ids = vec![login_id.clone()];
+    for extra in req.additional_login_ids.iter().flatten() {
+        if extra.is_empty() {
+            continue;
+        }
+        let normalized = if extra.contains('@') {
+            extra.to_lowercase()
+        } else {
+            extra.clone()
+        };
+        if !login_ids.contains(&normalized) {
+            login_ids.push(normalized);
+        }
+    }
+
     // On the seed path, honor a caller-provided `uid` as the userId: the backend
     // seed stores that uid as the user's descopeId and resolves admins via
     // findById(descopeId)/loadByUserId, so the emulator's userId must equal it.
@@ -121,7 +141,7 @@ pub(crate) async fn create_user_impl(
     let phone_present = req.phone.as_deref().is_some_and(|p| !p.trim().is_empty());
     let mut user = User {
         user_id,
-        login_ids: vec![login_id.clone()],
+        login_ids,
         email,
         phone: req.phone,
         name: req.display_name.or(req.name),
@@ -1003,6 +1023,44 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(second["user"]["email"].as_str().unwrap(), "dup@test.com");
+    }
+
+    // Why: real Descope registers every entry of `additionalLoginIds` as a
+    //      sign-in identifier. Backends pass the phone there so phone-keyed
+    //      auth (OTP SMS sign-in/verify, password sign-in by phone) resolves
+    //      the user. Dropping the field strands phone-first flows (OTP
+    //      password reset, password re-verification before account deletion)
+    //      with E112102 "User not found".
+    // Decision: create/create_test append additionalLoginIds to the user's
+    //           loginIds (deduped; emails lowercased like the primary).
+    #[tokio::test]
+    async fn create_test_user_registers_additional_login_ids() {
+        let state = make_state().await;
+        let resp = create_test(
+            State(state.clone()),
+            make_headers(&state),
+            PermissiveJson(CreateUserRequest {
+                login_id: Some("rep@test.com".into()),
+                email: Some("rep@test.com".into()),
+                phone: Some("+15550100300".into()),
+                additional_login_ids: Some(vec!["+15550100300".into()]),
+                test: true,
+                ..Default::default()
+            }),
+        )
+        .await
+        .unwrap();
+
+        let login_ids: Vec<&str> = resp["user"]["loginIds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap())
+            .collect();
+        assert_eq!(login_ids, vec!["rep@test.com", "+15550100300"]);
+
+        let users = state.users.read().await;
+        assert!(users.load("+15550100300").is_ok());
     }
 
     // Why: on the seed path, the backend stores a user's `uid` custom attribute as
