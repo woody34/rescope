@@ -48,6 +48,32 @@ A seed file pre-populates the emulator with users and tenants on startup. The fi
 }
 ```
 
+## Request Logging
+
+Rescope logs every HTTP request on completion — category tag, method, path, status, latency, and (for API traffic) a truncated request body:
+
+```
+INFO rescope::http: [API] POST /v1/auth/otp/verify/email 401 2ms body={"loginId":"x@y.com","code":"000000"} resp={"errorCode":"E011003","errorDescription":"Invalid token"}
+```
+
+Lines are tagged by traffic type:
+
+| Tag | Paths | Default visibility |
+|---|---|---|
+| `[API]` | `/v1/*`, `/v2/keys/*`, `/.well-known/*`, `/oauth/*` | Shown (INFO) |
+| `[EMU]` | `/emulator/*`, `/health` | Shown (INFO); `/health` hidden (DEBUG) |
+| `[DOCS]` | `/docs`, `/openapi.json` | Hidden (DEBUG) |
+| `[UI]` | Everything else (admin UI assets) | Hidden (DEBUG) |
+
+Set `RUST_LOG=rescope=debug` to reveal the hidden categories.
+
+Bodies are captured only for text-like content types (JSON, form-urlencoded, `text/*`), collapsed to a single line, and truncated. Response bodies are logged only for error statuses (≥ 400). Bodies are shown unmasked — including passwords and OTP codes — because seeing exactly what your SDK sent is the point of an emulator. `Authorization` headers are never logged.
+
+| Variable | Default | Description |
+|---|---|---|
+| `RESCOPE_LOG_BODY` | `1` | Set to `0` to disable body logging entirely |
+| `RESCOPE_LOG_BODY_MAX` | `256` | Body truncation cap in bytes |
+
 ## Startup Banner
 
 On startup, Rescope prints its configuration:

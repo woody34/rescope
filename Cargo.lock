@@ -1420,6 +1420,7 @@ dependencies = [
  "base64",
  "bcrypt",
  "flate2",
+ "futures-util",
  "hex",
  "jsonwebtoken",
  "mime_guess",

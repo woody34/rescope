@@ -8,8 +8,6 @@ use axum::{
 use tower_http::cors::{AllowOrigin, CorsLayer};
 #[cfg(feature = "dev-ui")]
 use tower_http::services::{ServeDir, ServeFile};
-use tower_http::trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer};
-use tracing::Level;
 
 pub fn build_router(state: EmulatorState) -> Router {
     let cors = CorsLayer::new()
@@ -587,11 +585,6 @@ pub fn build_router(state: EmulatorState) -> Router {
             post(crate::routes::mgmt::tenant::search),
         )
         .layer(cors)
-        .layer(
-            TraceLayer::new_for_http()
-                .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
-                .on_response(DefaultOnResponse::new().level(Level::INFO)),
-        )
         .with_state(state)
         // ── OpenAPI / Swagger UI ──────────────────────────────────────
         .route("/openapi.json", get(openapi_json))
@@ -608,7 +601,12 @@ pub fn build_router(state: EmulatorState) -> Router {
     #[cfg(not(feature = "dev-ui"))]
     let router = router.merge(crate::embedded_ui::embedded_ui_router());
 
-    router
+    // Outermost layer, added after the UI merge so every route — API,
+    // emulator, docs, and UI assets — produces a request log line.
+    let log_cfg = crate::request_log::BodyLogConfig::from_env();
+    router.layer(axum::middleware::from_fn(move |req, next| {
+        crate::request_log::log_request(log_cfg, req, next)
+    }))
 }
 
 async fn openapi_json() -> Json<serde_json::Value> {

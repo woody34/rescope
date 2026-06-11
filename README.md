@@ -74,6 +74,18 @@ Other workspace commands: `npm run build` (API + UI), `npm run lint` (Clippy + E
 | `DESCOPE_EMULATOR_SEED_FILE` | _(none)_ | Path to a JSON seed file |
 | `DESCOPE_EMULATOR_KEY_FILE` | _(none)_ | Path to a PKCS8 PEM private key (auto-generated if absent) |
 | `DESCOPE_EMULATOR_CONNECTOR_MODE` | `log` | `log` (default) or `invoke` (real outbound HTTP) |
+| `RESCOPE_LOG_BODY` | `1` | Set `0` to disable request/response body logging |
+| `RESCOPE_LOG_BODY_MAX` | `256` | Request-log body truncation cap (bytes) |
+
+## Request Logging
+
+Every request is logged on completion under the `rescope::http` target:
+
+```
+INFO rescope::http: [API] POST /v1/auth/otp/verify/email 401 2ms body={"loginId":"x@y.com","code":"000000"} resp={"errorCode":"E011003","errorDescription":"Invalid token"}
+```
+
+Lines are tagged by path: `[API]` (Descope API surface), `[EMU]` (`/emulator/*`, `/health`), `[DOCS]` (`/docs`, `/openapi.json`), `[UI]` (everything else). `[API]` and `[EMU]` log at INFO and are visible by default; `[UI]`, `[DOCS]`, and `/health` log at DEBUG — set `RUST_LOG=rescope=debug` to reveal them. Request bodies (text-like content types only) are collapsed to one line and truncated; response bodies appear only for error statuses (≥ 400). Bodies are intentionally unmasked — this is a dev-only emulator — but `Authorization` headers are never logged.
 
 ## Seed File
 
