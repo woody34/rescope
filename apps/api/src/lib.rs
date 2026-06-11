@@ -6,6 +6,7 @@ pub mod embedded_ui;
 pub mod extractor;
 pub mod mgmt_auth;
 pub mod openapi;
+pub mod request_log;
 pub mod routes;
 pub mod seed;
 pub mod server;

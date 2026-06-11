@@ -3,10 +3,14 @@ use tracing::info;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    // RUST_LOG governs fully when set (e.g. rescope=debug reveals [UI]/[DOCS]
+    // request lines); the rescope=info default applies only when it is unset.
+    // Force-adding the directive instead would override a user-supplied
+    // rescope=debug and pin request logging at INFO.
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("rescope=info".parse()?),
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("rescope=info")),
         )
         .init();
 

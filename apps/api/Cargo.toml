@@ -22,7 +22,9 @@ axum = { version = "0.7", features = ["macros"] }
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tower-http = { version = "0.5", features = ["cors", "fs", "trace"] }
+tower-http = { version = "0.5", features = ["cors", "fs"] }
+# Stream chaining so request-log body capture can replay large bodies
+futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 
 # Embedded UI assets
 rust-embed = { version = "8", features = ["interpolate-folder-path"] }
