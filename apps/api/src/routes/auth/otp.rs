@@ -395,6 +395,10 @@ pub async fn verify_phone_sms(
 pub struct UpdatePhoneRequest {
     pub login_id: String,
     pub phone: String,
+    /// Real SDKs (@descope/core-js-sdk and its wrappers) send `addToLoginIDs`
+    /// FLAT in the POST body; `options` is a legacy nested shape kept for
+    /// back-compat. Flat wins when both are present.
+    pub add_to_login_i_ds: Option<bool>,
     pub options: Option<OtpOptions>,
 }
 
@@ -409,9 +413,8 @@ pub async fn update_phone(
     PermissiveJson(req): PermissiveJson<UpdatePhoneRequest>,
 ) -> Result<Json<Value>, EmulatorError> {
     let add_to_ids = req
-        .options
-        .as_ref()
-        .and_then(|o| o.add_to_login_i_ds)
+        .add_to_login_i_ds
+        .or_else(|| req.options.as_ref().and_then(|o| o.add_to_login_i_ds))
         .unwrap_or(false);
 
     // Stage the new phone on the user. Real Descope sends an OTP to the new
@@ -812,18 +815,20 @@ mod tests {
         let state = make_state().await;
         let uid = insert_user(&state, "otp-update@test.com").await;
 
-        let result = update_phone(
-            State(state.clone()),
-            PermissiveJson(UpdatePhoneRequest {
-                login_id: "otp-update@test.com".into(),
-                phone: "+15550107000".into(),
-                options: Some(OtpOptions {
-                    add_to_login_i_ds: Some(true),
-                }),
-            }),
-        )
-        .await
+        // Deserialize the real SDK wire format: @descope/core-js-sdk (and the
+        // node-sdk built on it) sends `addToLoginIDs` FLAT in the POST body,
+        // not nested under `options`. Building the struct directly would skip
+        // the serde mapping this test needs to cover.
+        let req: UpdatePhoneRequest = serde_json::from_value(json!({
+            "loginId": "otp-update@test.com",
+            "phone": "+15550107000",
+            "addToLoginIDs": true,
+        }))
         .unwrap();
+
+        let result = update_phone(State(state.clone()), PermissiveJson(req))
+            .await
+            .unwrap();
 
         // A 6-digit code is returned and stored under the user, so the admin UI
         // / GET /emulator/otps can surface it.
@@ -861,6 +866,51 @@ mod tests {
                 .unwrap()
                 .verified_phone
         );
+    }
+
+    // Why: the nested `{"options": {"addToLoginIDs": true}}` shape predates the
+    //      flat field and must keep working for existing callers.
+    #[tokio::test]
+    async fn update_phone_nested_options_still_add_login_id() {
+        let state = make_state().await;
+        insert_user(&state, "otp-nested@test.com").await;
+
+        let req: UpdatePhoneRequest = serde_json::from_value(json!({
+            "loginId": "otp-nested@test.com",
+            "phone": "+15550107001",
+            "options": { "addToLoginIDs": true },
+        }))
+        .unwrap();
+        let _ = update_phone(State(state.clone()), PermissiveJson(req))
+            .await
+            .unwrap();
+
+        let users = state.users.read().await;
+        let u = users.load("otp-nested@test.com").unwrap();
+        assert!(u.login_ids.contains(&"+15550107001".to_string()));
+    }
+
+    // Why: flat is what current SDKs actually send, so it wins over the legacy
+    //      nested shape when a request carries both.
+    #[tokio::test]
+    async fn update_phone_flat_flag_overrides_nested_options() {
+        let state = make_state().await;
+        insert_user(&state, "otp-precedence@test.com").await;
+
+        let req: UpdatePhoneRequest = serde_json::from_value(json!({
+            "loginId": "otp-precedence@test.com",
+            "phone": "+15550107002",
+            "addToLoginIDs": false,
+            "options": { "addToLoginIDs": true },
+        }))
+        .unwrap();
+        let _ = update_phone(State(state.clone()), PermissiveJson(req))
+            .await
+            .unwrap();
+
+        let users = state.users.read().await;
+        let u = users.load("otp-precedence@test.com").unwrap();
+        assert!(!u.login_ids.contains(&"+15550107002".to_string()));
     }
 
     // ─── signup_in_email ──────────────────────────────────────────────────────

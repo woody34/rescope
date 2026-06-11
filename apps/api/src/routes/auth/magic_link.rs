@@ -476,6 +476,9 @@ pub struct UpdatePhoneRequest {
     pub login_id: String,
     pub phone: String,
     pub token: Option<String>,
+    /// Real SDKs send `addToLoginIDs` FLAT in the POST body — same wire shape
+    /// as the OTP update/phone endpoint.
+    pub add_to_login_i_ds: Option<bool>,
 }
 
 pub async fn update_phone_sms(
@@ -486,22 +489,18 @@ pub async fn update_phone_sms(
     if let Some(token) = &req.token {
         validate_refresh_jwt(&*state.km().await, token)?;
     }
-    // Persist the phone update
-    state.users.write().await.patch(
-        &req.login_id,
-        crate::store::user_store::UserPatch {
-            phone: Some(req.phone.clone()),
-            ..Default::default()
-        },
-    )?;
+    // Persist the phone update; when asked, register the phone as a loginId —
+    // real Descope does so the user can sign in by the new number afterwards.
+    let uid = {
+        let mut users = state.users.write().await;
+        let user = users.load_mut(&req.login_id)?;
+        user.phone = Some(req.phone.clone());
+        if req.add_to_login_i_ds.unwrap_or(false) && !user.login_ids.contains(&req.phone) {
+            user.login_ids.push(req.phone.clone());
+        }
+        user.user_id.clone()
+    };
     let token = generate_token();
-    let uid = state
-        .users
-        .read()
-        .await
-        .load(&req.login_id)?
-        .user_id
-        .clone();
     state
         .tokens
         .write()
@@ -698,6 +697,7 @@ mod tests {
                 login_id: "user@test.com".into(),
                 phone: "+15550020001".into(),
                 token: None,
+                add_to_login_i_ds: None,
             }),
         )
         .await
@@ -710,6 +710,29 @@ mod tests {
         );
     }
 
+    // Why: real SDKs send `addToLoginIDs` flat in the POST body, and real
+    //      Descope then registers the phone as a loginId.
+    #[tokio::test]
+    async fn update_phone_sms_flat_add_to_login_ids_registers_login_id() {
+        let state = make_state().await;
+        insert_user(&state, "lid@test.com", None).await;
+
+        let req: UpdatePhoneRequest = serde_json::from_value(json!({
+            "loginId": "lid@test.com",
+            "phone": "+15550020002",
+            "addToLoginIDs": true,
+        }))
+        .unwrap();
+        let _ = update_phone_sms(State(state.clone()), PermissiveJson(req))
+            .await
+            .unwrap();
+
+        let users = state.users.read().await;
+        let u = users.load("lid@test.com").unwrap();
+        assert_eq!(u.phone.as_deref(), Some("+15550020002"));
+        assert!(u.login_ids.contains(&"+15550020002".to_string()));
+    }
+
     #[tokio::test]
     async fn update_phone_sms_unknown_user_returns_not_found() {
         let state = make_state().await;
@@ -719,6 +742,7 @@ mod tests {
                 login_id: "ghost@test.com".into(),
                 phone: "+15550099999".into(),
                 token: None,
+                add_to_login_i_ds: None,
             }),
         )
         .await
