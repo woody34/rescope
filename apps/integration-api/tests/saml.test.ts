@@ -145,6 +145,23 @@ describe("POST /v1/auth/otp/update/phone/sms", () => {
     expect(u.user.loginIds).toContain("+15550009999");
   });
 
+  // The real SDKs (@descope/core-js-sdk, node-sdk) send addToLoginIDs FLAT in
+  // the POST body, not nested under options — this is the production wire shape.
+  it("adds phone to loginIds when flag sent flat (SDK wire format)", async () => {
+    const login = uniqueLogin("otp-phone-flat");
+    await client.mgmtPost("/v1/mgmt/user/create", { loginId: login, email: login });
+
+    await client.post("/v1/auth/otp/update/phone/sms", {
+      loginId: login,
+      phone: "+15550008877",
+      addToLoginIDs: true,
+    });
+
+    const user = await client.mgmtGet(`/v1/mgmt/user?loginid=${encodeURIComponent(login)}`);
+    const u = await user.json();
+    expect(u.user.loginIds).toContain("+15550008877");
+  });
+
   it("rejects unknown user", async () => {
     const res = await client.post("/v1/auth/otp/update/phone/sms", {
       loginId: "nobody@x.com",
