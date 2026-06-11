@@ -66,7 +66,7 @@ Accepts `loginId`, `email`, and optionally an existing session `token` for autho
 
 ### 4.1 Update Phone via SMS — `POST /v1/auth/otp/update/phone/sms`
 
-Accepts `loginId`, `phone`, and optional `options.addToLoginIDs`. Updates the `phone` field on the user record and sets `verifiedPhone: true`. If `addToLoginIDs` is `true`, also pushes the phone number into the user's `loginIds` array (making the phone a valid login identifier). No SMS is ever sent. Returns `{ "ok": true }`.
+Accepts `loginId`, `phone`, and optional `options.addToLoginIDs`. Stages the new `phone` on the user record (leaving `verifiedPhone: false`) and issues an OTP code stored against the user, mirroring Descope's send-then-verify flow — the phone becomes `verifiedPhone: true` only once the code is confirmed via `POST /v1/auth/otp/verify/sms`. If `addToLoginIDs` is `true`, also pushes the phone number into the user's `loginIds` array (making the phone a valid login identifier). No real SMS is sent, but the code is retrievable via `GET /emulator/otps` (and the admin UI). Returns `{ "maskedPhone": "...", "code": "123456" }`.
 
 Full OTP sign-up, sign-in, and verify flows for both email and SMS are also implemented. See the API Endpoints section in the README for the complete list.
 

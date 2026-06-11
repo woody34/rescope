@@ -414,15 +414,45 @@ pub async fn update_phone(
         .and_then(|o| o.add_to_login_i_ds)
         .unwrap_or(false);
 
-    let mut users = state.users.write().await;
-    let user = users.load_mut(&req.login_id)?;
-    user.phone = Some(req.phone.clone());
-    user.verified_phone = true;
-    if add_to_ids && !user.login_ids.contains(&req.phone) {
-        user.login_ids.push(req.phone.clone());
+    // Stage the new phone on the user. Real Descope sends an OTP to the new
+    // number and leaves it unverified until that code is confirmed via
+    // /v1/auth/otp/verify/sms — so we issue a code here instead of marking the
+    // phone verified outright. Without this the code never lands in the OTP
+    // store and never surfaces in the admin UI / `/emulator/otps`.
+    let user_id = {
+        let mut users = state.users.write().await;
+        let user = users.load_mut(&req.login_id)?;
+        user.phone = Some(req.phone.clone());
+        user.verified_phone = false;
+        if add_to_ids && !user.login_ids.contains(&req.phone) {
+            user.login_ids.push(req.phone.clone());
+        }
+        user.user_id.clone()
+    };
+
+    let code = generate_otp_code();
+    state.otps.write().await.store(&user_id, code.clone());
+    tracing::info!(login_id = %req.login_id, code = %code, "\u{1f4f1} OTP generated (update phone)");
+
+    // Fire-and-forget: notify the configured SMS connector (if any).
+    let sms_connector_id = state
+        .auth_method_config
+        .read()
+        .await
+        .get()
+        .otp
+        .sms_connector_id
+        .clone();
+    if let Some(cid) = sms_connector_id {
+        if let Ok(c) = state.connectors.read().await.load(&cid).cloned() {
+            let inv = state.invoker.clone();
+            let payload = otp_payload(&req.phone, &code, "sms");
+            tokio::spawn(async move { inv.invoke(&c, payload).await });
+        }
     }
 
-    Ok(Json(json!({ "ok": true })))
+    let masked = masked_phone(&req.phone);
+    Ok(Json(json!({ "maskedPhone": masked, "code": code })))
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -769,6 +799,68 @@ mod tests {
         .await
         .unwrap_err();
         assert!(matches!(err, EmulatorError::InvalidToken));
+    }
+
+    // ─── update phone ─────────────
+
+    // Why: an authenticated phone update (otp.update.phone.sms) must issue a
+    //      code the caller can later verify. The handler used to mark the phone
+    //      verified outright and store no code, so `/emulator/otps` (and the
+    //      admin UI) stayed empty and there was nothing to verify.
+    #[tokio::test]
+    async fn update_phone_issues_otp_and_defers_verification() {
+        let state = make_state().await;
+        let uid = insert_user(&state, "otp-update@test.com").await;
+
+        let result = update_phone(
+            State(state.clone()),
+            PermissiveJson(UpdatePhoneRequest {
+                login_id: "otp-update@test.com".into(),
+                phone: "+15550107000".into(),
+                options: Some(OtpOptions {
+                    add_to_login_i_ds: Some(true),
+                }),
+            }),
+        )
+        .await
+        .unwrap();
+
+        // A 6-digit code is returned and stored under the user, so the admin UI
+        // / GET /emulator/otps can surface it.
+        let code = result.0["code"].as_str().unwrap().to_string();
+        assert_eq!(code.len(), 6);
+        assert!(result.0["maskedPhone"].as_str().is_some());
+        assert_eq!(state.otps.read().await.peek(&uid), Some(code.as_str()));
+
+        // Phone staged + added as a login id, but NOT yet verified.
+        {
+            let users = state.users.read().await;
+            let u = users.load("otp-update@test.com").unwrap();
+            assert_eq!(u.phone.as_deref(), Some("+15550107000"));
+            assert!(!u.verified_phone);
+            assert!(u.login_ids.contains(&"+15550107000".to_string()));
+        }
+
+        // Verifying the issued code flips verified_phone to true and mints tokens.
+        let (_, body) = verify_phone_sms(
+            State(state.clone()),
+            PermissiveJson(OtpVerifyPhoneRequest {
+                login_id: "otp-update@test.com".into(),
+                code,
+            }),
+        )
+        .await
+        .unwrap();
+        assert!(body["sessionJwt"].as_str().is_some());
+        assert!(
+            state
+                .users
+                .read()
+                .await
+                .load("otp-update@test.com")
+                .unwrap()
+                .verified_phone
+        );
     }
 
     // ─── signup_in_email ──────────────────────────────────────────────────────

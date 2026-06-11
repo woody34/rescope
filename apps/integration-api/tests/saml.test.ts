@@ -121,7 +121,9 @@ describe("POST /v1/auth/otp/update/phone/sms", () => {
     });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.ok).toBe(true);
+    // Update issues an OTP to the new number (delivered, then verified separately).
+    expect(body.maskedPhone).toBeTruthy();
+    expect(body.code).toMatch(/^\d{6}$/);
 
     const user = await client.mgmtGet(`/v1/mgmt/user?loginid=${encodeURIComponent(login)}`);
     const u = await user.json();
