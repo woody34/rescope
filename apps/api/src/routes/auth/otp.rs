@@ -452,6 +452,48 @@ mod tests {
         uid
     }
 
+    // Why: phone-first flows (e.g. an SMS-OTP forgot-password reset) sign in
+    //      and verify by the user's phone number while the primary loginId
+    //      stays the email — real Descope resolves the user by phone for SMS OTP.
+    //      Without phone resolution both calls 404 the user (E112102) and the
+    //      reset flow dead-ends on the verify screen.
+    // Decision: signin/verify resolve via the store's phone fallback; the OTP
+    //           issued at sign-in verifies under the same user.
+    #[tokio::test]
+    async fn signin_and_verify_sms_resolve_user_by_phone_field() {
+        let state = make_state().await;
+        let uid = new_user_id();
+        let mut u = User::default();
+        u.user_id = uid.clone();
+        u.login_ids = vec!["phone-first@test.com".into()];
+        u.email = Some("phone-first@test.com".into());
+        u.phone = Some("+15550100400".into());
+        u.status = "enabled".into();
+        state.users.write().await.insert(u).unwrap();
+
+        let send = signin_phone_sms(
+            State(state.clone()),
+            PermissiveJson(OtpSigninPhoneRequest {
+                login_id: "+15550100400".into(),
+            }),
+        )
+        .await
+        .unwrap();
+        let code = send.0["code"].as_str().unwrap().to_string();
+
+        let (_, body) = verify_phone_sms(
+            State(state.clone()),
+            PermissiveJson(OtpVerifyPhoneRequest {
+                login_id: "+15550100400".into(),
+                code,
+            }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(body["user"]["userId"].as_str().unwrap(), uid);
+        assert!(body["sessionJwt"].as_str().is_some());
+    }
+
     // ─── signup email ─────────────
 
     #[tokio::test]

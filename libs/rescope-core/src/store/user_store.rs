@@ -51,24 +51,8 @@ impl UserStore {
     }
 
     pub fn load(&self, login_id: &str) -> Result<&User, EmulatorError> {
-        // Exact loginId match
-        if let Some(uid) = self.by_login_id.get(login_id) {
-            return self.by_user_id.get(uid).ok_or(EmulatorError::UserNotFound);
-        }
-        // Fallback: match by email (case-insensitive)
-        let lower = login_id.to_lowercase();
-        if let Some(uid) = self.by_email.get(&lower) {
-            return self.by_user_id.get(uid).ok_or(EmulatorError::UserNotFound);
-        }
-        // Fallback: bare username → find loginId starting with "{login_id}@"
-        // Supports e2e patterns like "alice" → "alice@example.com"
-        let prefix = format!("{}@", lower);
-        for (lid, uid) in &self.by_login_id {
-            if lid.to_lowercase().starts_with(&prefix) {
-                return self.by_user_id.get(uid).ok_or(EmulatorError::UserNotFound);
-            }
-        }
-        Err(EmulatorError::UserNotFound)
+        let uid = self.resolve_user_id(login_id)?;
+        self.by_user_id.get(&uid).ok_or(EmulatorError::UserNotFound)
     }
 
     pub fn load_mut(&mut self, login_id: &str) -> Result<&mut User, EmulatorError> {
@@ -78,7 +62,9 @@ impl UserStore {
             .ok_or(EmulatorError::UserNotFound)
     }
 
-    /// Resolve a login_id to a user_id using the same fallback chain as load().
+    /// Resolve a login_id to a user_id. Single source of truth for the
+    /// fallback chain: exact loginId → email (case-insensitive) → phone →
+    /// bare-username prefix.
     fn resolve_user_id(&self, login_id: &str) -> Result<String, EmulatorError> {
         if let Some(uid) = self.by_login_id.get(login_id) {
             return Ok(uid.clone());
@@ -87,6 +73,29 @@ impl UserStore {
         if let Some(uid) = self.by_email.get(&lower) {
             return Ok(uid.clone());
         }
+        // Fallback: match by phone — real Descope resolves phone-keyed auth
+        // (OTP SMS sign-in/verify, password sign-in by phone) by the user's
+        // phone number even when it is not an explicit loginId. The index only
+        // reflects insert-time phones, so verify the hit and fall back to a
+        // scan for phones set later via patch/update.
+        if let Some(uid) = self.by_phone.get(login_id) {
+            if self
+                .by_user_id
+                .get(uid)
+                .is_some_and(|u| u.phone.as_deref() == Some(login_id))
+            {
+                return Ok(uid.clone());
+            }
+        }
+        if let Some(user) = self
+            .by_user_id
+            .values()
+            .find(|u| u.phone.as_deref() == Some(login_id))
+        {
+            return Ok(user.user_id.clone());
+        }
+        // Fallback: bare username → find loginId starting with "{login_id}@"
+        // Supports e2e patterns like "alice" → "alice@example.com"
         let prefix = format!("{}@", lower);
         for (lid, uid) in &self.by_login_id {
             if lid.to_lowercase().starts_with(&prefix) {
@@ -520,19 +529,26 @@ impl UserStore {
 
     /// Rename a loginId. Fails if `new_login_id` is already taken or `old_login_id` doesn't exist.
     pub fn update_login_id(&mut self, old: &str, new: &str) -> Result<&User, EmulatorError> {
-        if self.by_login_id.contains_key(new) {
-            return Err(EmulatorError::UserAlreadyExists);
-        }
+        // Only a loginId owned by a DIFFERENT user is a conflict — swapping to
+        // an identifier the user already owns (e.g. a phone registered via
+        // additionalLoginIds) re-keys without duplicating.
         let uid = self
             .by_login_id
-            .remove(old)
+            .get(old)
+            .cloned()
             .ok_or(EmulatorError::UserNotFound)?;
+        if let Some(owner) = self.by_login_id.get(new) {
+            if *owner != uid {
+                return Err(EmulatorError::UserAlreadyExists);
+            }
+        }
+        self.by_login_id.remove(old);
         self.by_login_id.insert(new.to_string(), uid.clone());
         let user = self
             .by_user_id
             .get_mut(&uid)
             .ok_or(EmulatorError::UserNotFound)?;
-        user.login_ids.retain(|l| l != old);
+        user.login_ids.retain(|l| l != old && l != new);
         user.login_ids.push(new.to_string());
         Ok(self.by_user_id.get(&uid).unwrap())
     }
@@ -1336,5 +1352,103 @@ mod tests {
             user.custom_attributes.get("tier"),
             Some(&serde_json::json!("platinum"))
         );
+    }
+
+    // ─── Phone resolution ─────────────────────────────────────────────────
+    // Real Descope resolves a user by their phone number for phone-keyed auth
+    // (OTP SMS sign-in/verify, password sign-in by phone) even when the phone
+    // is not an explicit loginId. The store must fall back to the phone field
+    // when no loginId/email matches.
+
+    #[test]
+    fn load_resolves_by_phone_field() {
+        let mut store = UserStore::new();
+        let mut u = make_user("grace");
+        u.phone = Some("+15550100200".into());
+        store.insert(u).unwrap();
+
+        let loaded = store.load("+15550100200").unwrap();
+        assert_eq!(loaded.login_ids[0], "grace");
+    }
+
+    #[test]
+    fn resolve_user_id_resolves_by_phone_field() {
+        let mut store = UserStore::new();
+        let mut u = make_user("heidi");
+        u.phone = Some("+15550100201".into());
+        let uid = u.user_id.clone();
+        store.insert(u).unwrap();
+
+        let user = store.load_mut("+15550100201").unwrap();
+        assert_eq!(user.user_id, uid);
+    }
+
+    #[test]
+    fn load_resolves_by_phone_set_via_patch() {
+        // updatePhone arrives through patch() after insert — resolution must
+        // see the new phone even though insert-time indices predate it.
+        let mut store = UserStore::new();
+        store.insert(make_user("ivan")).unwrap();
+        store
+            .patch(
+                "ivan",
+                UserPatch {
+                    phone: Some("+15550100202".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        let loaded = store.load("+15550100202").unwrap();
+        assert_eq!(loaded.login_ids[0], "ivan");
+    }
+
+    #[test]
+    fn load_prefers_exact_login_id_over_phone_field() {
+        let mut store = UserStore::new();
+        let mut owner = make_user("judy");
+        owner.login_ids = vec!["+15550100203".into()];
+        owner.email = None;
+        store.insert(owner).unwrap();
+
+        let mut other = make_user("kim");
+        other.phone = Some("+15550100203".into());
+        store.insert(other).unwrap();
+
+        let loaded = store.load("+15550100203").unwrap();
+        assert_eq!(loaded.login_ids[0], "+15550100203");
+    }
+
+    // ─── updateLoginId against an already-owned loginId ───────────────────
+    // Swapping the primary loginId to an identifier the user already owns
+    // (e.g. email -> phone when the phone was registered at create time) must
+    // succeed without duplicating the loginId. Only a loginId owned by a
+    // DIFFERENT user is a conflict.
+
+    #[test]
+    fn update_login_id_to_own_login_id_succeeds_without_duplicate() {
+        let mut store = UserStore::new();
+        let mut u = make_user("leo");
+        u.login_ids = vec!["leo".into(), "+15550100204".into()];
+        store.insert(u).unwrap();
+
+        let user = store.update_login_id("leo", "+15550100204").unwrap();
+        assert_eq!(user.login_ids, vec!["+15550100204".to_string()]);
+
+        assert!(matches!(
+            store.load("leo"),
+            Err(EmulatorError::UserNotFound)
+        ));
+        assert!(store.load("+15550100204").is_ok());
+    }
+
+    #[test]
+    fn update_login_id_to_other_users_login_id_conflicts() {
+        let mut store = UserStore::new();
+        store.insert(make_user("mallory")).unwrap();
+        store.insert(make_user("nina")).unwrap();
+
+        let err = store.update_login_id("mallory", "nina").unwrap_err();
+        assert!(matches!(err, EmulatorError::UserAlreadyExists));
     }
 }

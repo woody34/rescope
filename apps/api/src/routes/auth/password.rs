@@ -463,6 +463,43 @@ mod tests {
         assert_eq!(body["nonAlphanumeric"], false);
     }
 
+    // Why: backends re-verify a user's password by their PHONE before
+    //      destructive actions (account deletion verifies via user.phone ??
+    //      user.email). The password is set against the email loginId, so
+    //      sign-in by phone must resolve to the same user — real Descope does;
+    //      without it the verify always fails E112102 and deletion is blocked.
+    // Decision: password sign-in resolves the loginId via the store's phone
+    //           fallback and verifies the same stored hash.
+    #[tokio::test]
+    async fn signin_with_phone_resolves_user_by_phone_field() {
+        let config = crate::config::EmulatorConfig::default();
+        let state = EmulatorState::new(&config).await.unwrap();
+
+        let mut user = User::default();
+        user.user_id = new_user_id();
+        user.login_ids = vec!["rep-del@example.com".into()];
+        user.email = Some("rep-del@example.com".into());
+        user.phone = Some("+15550100500".into());
+        user.status = "enabled".into();
+        user._password_hash = Some(bcrypt::hash("Sup3rSecret!", 4).unwrap());
+        state.users.write().await.insert(user).unwrap();
+
+        let (_, body) = signin(
+            State(state.clone()),
+            PermissiveJson(SigninRequest {
+                login_id: "+15550100500".into(),
+                password: "Sup3rSecret!".into(),
+            }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            body["user"]["email"].as_str().unwrap(),
+            "rep-del@example.com"
+        );
+        assert!(body["sessionJwt"].as_str().is_some());
+    }
+
     // Why: the authenticated change-password flow (cOTP / forced one-time
     //      password change) calls password.update with the user's refresh JWT,
     //      not a one-time reset token. Consuming it as a reset token failed with
