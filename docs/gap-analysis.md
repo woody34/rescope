@@ -68,7 +68,7 @@ This document crosswalks every Descope REST API feature area against what the em
 | `POST /v1/auth/otp/verify/email`       | ✅       | Verifies code; returns session + refresh JWTs                  |
 | `POST /v1/auth/otp/verify/phone/sms`   | ✅       | Verifies code; returns session + refresh JWTs                  |
 | `POST /v1/auth/otp/update/email`       | ✅       | Updates email on user record                                   |
-| `POST /v1/auth/otp/update/phone/sms`   | ✅       | Updates phone field; no SMS sent                               |
+| `POST /v1/auth/otp/update/phone/sms`   | ✅       | Stages phone, issues OTP; verified on verify/sms               |
 | `POST /v1/auth/otp/signup/phone/voice` | ❌       | OTP voice — not implemented                                    |
 | `POST /v1/auth/otp/signin/phone/voice` | ❌       | OTP voice — not implemented                                    |
 | `POST /v1/auth/otp/update/phone/voice` | ❌       | OTP voice phone update — not implemented                       |

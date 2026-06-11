@@ -177,12 +177,18 @@ describe("POST /v1/mgmt/tests/generate/otp", () => {
     expect(body.loginId).toBe(login);
   });
 
-  it("returns 400 for non-test user", async () => {
+  it("also generates OTP for a regular (non-test) user", async () => {
+    // The emulator deliberately does NOT enforce test-only here, so a caller
+    // can generate an OTP for any existing user. See the unit test
+    // generate_otp_for_non_test_user_succeeds_in_emulator in
+    // apps/api/src/routes/mgmt/user.rs.
     const login = uniqueLogin("otp-mgmt-regular");
     // Create regular (non-test) user via signup
     await otpSignupEmail(login);
-    const { status } = await mgmtGenerateOtp(login);
-    expect(status).toBe(400);
+    const { status, body } = await mgmtGenerateOtp(login);
+    expect(status).toBe(200);
+    expect((body.code as string).length).toBe(6);
+    expect(body.loginId).toBe(login);
   });
 });
 
