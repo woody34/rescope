@@ -6,8 +6,8 @@ use crate::{
     store::{
         access_key_store::AccessKeyStore, auth_method_config::AuthMethodConfigStore,
         connector_store::ConnectorStore, custom_attribute_store::CustomAttributeStore,
-        idp_store::IdpStore, jwt_template_store::JwtTemplateStore, otp_store::OtpStore,
-        permission_store::PermissionStore, revocation_store::RevocationStore,
+        flow_store::FlowStore, idp_store::IdpStore, jwt_template_store::JwtTemplateStore,
+        otp_store::OtpStore, permission_store::PermissionStore, revocation_store::RevocationStore,
         role_store::RoleStore, tenant_store::TenantStore, token_store::TokenStore,
         user_store::UserStore,
     },
@@ -27,6 +27,8 @@ pub struct EmulatorState {
     pub tokens: Arc<RwLock<TokenStore>>,
     pub revoked: Arc<RwLock<RevocationStore>>,
     pub otps: Arc<RwLock<OtpStore>>,
+    /// In-flight Descope flow executions (sign-up-or-in-passwords runtime).
+    pub flows: Arc<RwLock<FlowStore>>,
     /// Per-user revocation timestamp (userId → epoch secs).
     pub user_revocations: Arc<RwLock<HashMap<String, u64>>>,
     /// Per-login-id lockout state for OTP, password, etc.
@@ -69,6 +71,7 @@ impl EmulatorState {
             tokens: Arc::new(RwLock::new(TokenStore::new())),
             revoked: Arc::new(RwLock::new(RevocationStore::new())),
             otps: Arc::new(RwLock::new(OtpStore::new())),
+            flows: Arc::new(RwLock::new(FlowStore::new())),
             user_revocations: Arc::new(RwLock::new(HashMap::new())),
             lockouts: Arc::new(RwLock::new(HashMap::new())),
             // Config stores
@@ -131,6 +134,7 @@ impl EmulatorState {
         self.tenants.write().await.reset();
         self.revoked.write().await.reset();
         self.otps.write().await.reset();
+        self.flows.write().await.reset();
         self.user_revocations.write().await.clear();
         self.lockouts.write().await.clear();
         self.auth_method_config.write().await.reset();
