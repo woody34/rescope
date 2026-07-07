@@ -1,3 +1,4 @@
+pub mod flow;
 pub mod magic_link;
 pub mod otp;
 pub mod password;

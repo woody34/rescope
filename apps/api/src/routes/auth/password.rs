@@ -37,7 +37,7 @@ fn masked_email(email: &str) -> String {
     }
 }
 
-fn build_jwt_response(
+pub(crate) fn build_jwt_response(
     state: &EmulatorState,
     _user_id: &str,
     session_jwt: &str,

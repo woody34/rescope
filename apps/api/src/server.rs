@@ -84,6 +84,12 @@ pub fn build_router(state: EmulatorState) -> Router {
             "/v1/auth/password/policy",
             get(crate::routes::auth::password::policy),
         )
+        // ── Flow runtime (descope-wc) ─────────────────────────────────
+        .route("/v1/flow/start", post(crate::routes::auth::flow::start))
+        .route("/v2/flow/start", post(crate::routes::auth::flow::start))
+        .route("/v1/flow/next", post(crate::routes::auth::flow::next))
+        .route("/v2/flow/next", post(crate::routes::auth::flow::next))
+        .route("/pages/*rest", get(crate::routes::flow_assets::serve))
         // ── Auth: Magic Link ──────────────────────────────────────────
         .route(
             "/v1/auth/magiclink/signup/email",
