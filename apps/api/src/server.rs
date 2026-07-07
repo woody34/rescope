@@ -350,6 +350,22 @@ pub fn build_router(state: EmulatorState) -> Router {
             "/v1/mgmt/user/update/role/add",
             post(crate::routes::mgmt::user::add_roles),
         )
+        // v2 aliases — the official @descope SDK sends project-role mutations to
+        // /v2/mgmt/user/update/role/* (addRoles → /v2/.../role/add). Without these the
+        // v2 request 404/405s with an empty body and the SDK throws "Unexpected end of
+        // JSON input" — the same class of bug as the user-tenant aliases above.
+        .route(
+            "/v2/mgmt/user/update/role/add",
+            post(crate::routes::mgmt::user::add_roles),
+        )
+        .route(
+            "/v2/mgmt/user/update/role/set",
+            post(crate::routes::mgmt::user::set_roles),
+        )
+        .route(
+            "/v2/mgmt/user/update/role/remove",
+            post(crate::routes::mgmt::user::remove_roles),
+        )
         .route(
             "/v1/mgmt/user/update/picture",
             post(crate::routes::mgmt::user::update_picture),
@@ -685,5 +701,41 @@ mod tests {
             .json(&json!({ "loginId": "tenant-route@example.com", "tenantId": "t-route-1" }))
             .await
             .assert_status_ok();
+    }
+
+    /// Why: the official @descope SDK calls `addRoles` at the **v2** path
+    ///      `/v2/mgmt/user/update/role/add`; the emulator only registered the v1
+    ///      route, so the SDK hit a 404/405 with an empty body and threw "Unexpected
+    ///      end of JSON input" — blocking any SDK-driven project-role assignment.
+    /// Decision: drive the real router via the SDK's v2 path end-to-end so the alias
+    ///      cannot silently regress, and assert the roles actually land on the user.
+    #[tokio::test]
+    async fn add_roles_reachable_at_descope_sdk_v2_path() {
+        let state = EmulatorState::new(&EmulatorConfig::default())
+            .await
+            .unwrap();
+        let auth = format!(
+            "{}:{}",
+            state.config.project_id, state.config.management_key
+        );
+        let server = TestServer::new(build_router(state)).unwrap();
+
+        server
+            .post("/v1/mgmt/user/create")
+            .authorization_bearer(&auth)
+            .json(&json!({ "loginId": "role-route@test.com", "email": "role-route@test.com" }))
+            .await
+            .assert_status_ok();
+
+        let resp = server
+            .post("/v2/mgmt/user/update/role/add")
+            .authorization_bearer(&auth)
+            .json(&json!({ "loginId": "role-route@test.com", "roleNames": ["admin", "editor"] }))
+            .await;
+        resp.assert_status_ok();
+        let body = resp.json::<serde_json::Value>();
+        let roles = body["user"]["roleNames"].as_array().unwrap();
+        assert!(roles.iter().any(|r| r == "admin"));
+        assert!(roles.iter().any(|r| r == "editor"));
     }
 }
