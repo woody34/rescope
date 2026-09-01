@@ -9,7 +9,7 @@ use crate::{
     error::EmulatorError,
     extractor::PermissiveJson,
     state::EmulatorState,
-    types::{AuthType, OidcConfig, SamlConfig},
+    types::{AuthType, OidcConfig, SamlConfig, SsoJitProvisioning},
 };
 
 pub async fn load_all(
@@ -43,6 +43,7 @@ pub struct CreateTenantRequest {
     pub parent_tenant_id: Option<String>,
     pub session_token_ttl_override: Option<u64>,
     pub refresh_token_ttl_override: Option<u64>,
+    pub sso_jit_provisioning: Option<SsoJitProvisioning>,
 }
 
 pub async fn create(
@@ -78,6 +79,9 @@ pub async fn create(
             req.refresh_token_ttl_override,
         )?;
     }
+    if let Some(jit) = req.sso_jit_provisioning {
+        state.tenants.write().await.set_sso_jit(&id, jit)?;
+    }
     let t = state.tenants.read().await.load(&id)?.clone();
     Ok(Json(json!({ "tenant": t })))
 }
@@ -97,6 +101,7 @@ pub struct UpdateTenantRequest {
     pub parent_tenant_id: Option<String>,
     pub session_token_ttl_override: Option<u64>,
     pub refresh_token_ttl_override: Option<u64>,
+    pub sso_jit_provisioning: Option<SsoJitProvisioning>,
 }
 
 pub async fn update(
@@ -117,6 +122,9 @@ pub async fn update(
         req.session_token_ttl_override,
         req.refresh_token_ttl_override,
     )?;
+    if let Some(jit) = req.sso_jit_provisioning {
+        state.tenants.write().await.set_sso_jit(&req.id, jit)?;
+    }
     let t = state.tenants.read().await.load(&req.id)?.clone();
     Ok(Json(json!({ "tenant": t })))
 }
@@ -246,6 +254,7 @@ mod tests {
                 parent_tenant_id: None,
                 session_token_ttl_override: None,
                 refresh_token_ttl_override: None,
+                sso_jit_provisioning: None,
             }),
         )
         .await
@@ -272,6 +281,7 @@ mod tests {
                 parent_tenant_id: None,
                 session_token_ttl_override: None,
                 refresh_token_ttl_override: None,
+                sso_jit_provisioning: None,
             }),
         )
         .await
@@ -290,6 +300,7 @@ mod tests {
                 parent_tenant_id: None,
                 session_token_ttl_override: None,
                 refresh_token_ttl_override: None,
+                sso_jit_provisioning: None,
             }),
         )
         .await
@@ -317,6 +328,7 @@ mod tests {
                 parent_tenant_id: None,
                 session_token_ttl_override: None,
                 refresh_token_ttl_override: None,
+                sso_jit_provisioning: None,
             }),
         )
         .await
@@ -335,6 +347,7 @@ mod tests {
                 parent_tenant_id: None,
                 session_token_ttl_override: None,
                 refresh_token_ttl_override: None,
+                sso_jit_provisioning: None,
             }),
         )
         .await
@@ -360,6 +373,7 @@ mod tests {
                 parent_tenant_id: None,
                 session_token_ttl_override: None,
                 refresh_token_ttl_override: None,
+                sso_jit_provisioning: None,
             }),
         )
         .await
@@ -387,6 +401,7 @@ mod tests {
                 parent_tenant_id: None,
                 session_token_ttl_override: None,
                 refresh_token_ttl_override: None,
+                sso_jit_provisioning: None,
             }),
         )
         .await
@@ -439,6 +454,7 @@ mod tests {
                 parent_tenant_id: None,
                 session_token_ttl_override: None,
                 refresh_token_ttl_override: None,
+                sso_jit_provisioning: None,
             }),
         )
         .await
@@ -484,6 +500,7 @@ mod tests {
                 parent_tenant_id: None,
                 session_token_ttl_override: None,
                 refresh_token_ttl_override: None,
+                sso_jit_provisioning: None,
             }),
         )
         .await
@@ -502,6 +519,7 @@ mod tests {
                 parent_tenant_id: None,
                 session_token_ttl_override: None,
                 refresh_token_ttl_override: None,
+                sso_jit_provisioning: None,
             }),
         )
         .await
@@ -539,6 +557,7 @@ mod tests {
                 parent_tenant_id: None,
                 session_token_ttl_override: None,
                 refresh_token_ttl_override: None,
+                sso_jit_provisioning: None,
             }),
         )
         .await
@@ -557,6 +576,7 @@ mod tests {
                 parent_tenant_id: None,
                 session_token_ttl_override: None,
                 refresh_token_ttl_override: None,
+                sso_jit_provisioning: None,
             }),
         )
         .await

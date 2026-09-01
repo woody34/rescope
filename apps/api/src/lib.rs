@@ -10,6 +10,7 @@ pub mod request_log;
 pub mod routes;
 pub mod seed;
 pub mod server;
+pub mod sso_jit;
 pub mod state;
 
 // ── Re-exports from rescope-core ──────────────────────────────────────────────

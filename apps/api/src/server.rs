@@ -566,6 +566,12 @@ pub fn build_router(state: EmulatorState) -> Router {
             "/emulator/idp/callback",
             get(crate::routes::emulator::idp_oidc::callback),
         )
+        // ── Emulator: SSO just-in-time provisioning ──────────────────
+        .route(
+            "/emulator/sso/provision",
+            get(crate::routes::emulator::sso_provision::show)
+                .post(crate::routes::emulator::sso_provision::submit),
+        )
         // ── Emulator: IdP SAML ───────────────────────────────────────
         .route(
             "/emulator/idp/:idp_id/metadata",

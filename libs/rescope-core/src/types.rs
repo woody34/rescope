@@ -158,6 +158,49 @@ mod tests {
         assert_eq!(json["verifiedRecoveryEmail"], false);
         assert_eq!(json["verifiedRecoveryPhone"], false);
     }
+
+    /// Why: tenants seeded before SSO just-in-time provisioning existed carry no
+    ///      `ssoJitProvisioning` object, and an unknown SSO email must still be
+    ///      provisioned rather than rejected.
+    /// Decision: an absent config resolves to enabled + prompt, so the permissive
+    ///      behavior is the default rather than something every tenant opts into.
+    #[test]
+    fn tenant_without_jit_config_defaults_to_enabled_with_prompt() {
+        let tenant = Tenant::default();
+        let jit = tenant.sso_jit();
+        assert!(jit.enabled);
+        assert!(jit.prompt);
+        assert!(jit.default_role_names.is_empty());
+    }
+
+    /// Why: partial JSON is the normal wire shape — callers disabling the config
+    ///      screen for automated sign-ins send only `{"prompt": false}`.
+    /// Decision: every field defaults independently, so omitting one never
+    ///      silently disables provisioning.
+    #[test]
+    fn jit_config_deserializes_partially_with_permissive_defaults() {
+        let jit: SsoJitProvisioning = serde_json::from_str(r#"{"prompt": false}"#).expect("parse");
+        assert!(jit.enabled);
+        assert!(!jit.prompt);
+    }
+
+    /// Why: the tenant that owns an email's domain is what makes an SSO login
+    ///      "valid" — Descope splits the domain list between `domains` and
+    ///      `selfProvisioningDomains`, and a tenant configured with only the
+    ///      latter must still match.
+    /// Decision: `owns_email` reads both lists, case-insensitively.
+    #[test]
+    fn owns_email_matches_either_domain_list_case_insensitively() {
+        let tenant = Tenant {
+            domains: vec!["Example.test".into()],
+            self_provisioning_domains: vec!["partner.test".into()],
+            ..Default::default()
+        };
+        assert!(tenant.owns_email("someone@example.test"));
+        assert!(tenant.owns_email("someone@PARTNER.test"));
+        assert!(!tenant.owns_email("someone@other.test"));
+        assert!(!tenant.owns_email("not-an-email"));
+    }
 }
 
 // ─── SAML / OIDC config embedded in Tenant ───────────────────────────────────
@@ -210,6 +253,75 @@ pub struct Tenant {
     /// Sub-tenant support: optional parent tenant ID.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_tenant_id: Option<String>,
+    /// Just-in-time provisioning for SSO sign-ins by users the emulator has
+    /// never seen. `None` means "use the defaults" (enabled, with the config
+    /// screen), so tenants created before this field existed keep working.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sso_jit_provisioning: Option<SsoJitProvisioning>,
+}
+
+impl Tenant {
+    /// Effective JIT-provisioning settings, falling back to the defaults when
+    /// the tenant does not configure them.
+    pub fn sso_jit(&self) -> SsoJitProvisioning {
+        self.sso_jit_provisioning.clone().unwrap_or_default()
+    }
+
+    /// Every domain that maps an email address to this tenant. Real Descope
+    /// keeps a separate self-provisioning list, so honor both.
+    pub fn all_domains(&self) -> impl Iterator<Item = &String> {
+        self.domains
+            .iter()
+            .chain(self.self_provisioning_domains.iter())
+    }
+
+    /// Whether an email's domain belongs to this tenant.
+    pub fn owns_email(&self, email: &str) -> bool {
+        let domain = email.rsplit('@').next().unwrap_or_default().to_lowercase();
+        !domain.is_empty()
+            && email.contains('@')
+            && self.all_domains().any(|d| d.to_lowercase() == domain)
+    }
+}
+
+/// Controls what happens when an unknown login ID arrives on an SSO surface.
+///
+/// Real Descope provisions the user from the IdP assertion. The emulator has no
+/// upstream IdP to read attributes from, so it either applies the tenant's
+/// defaults or asks the person signing in — see `prompt`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SsoJitProvisioning {
+    /// Create the user on first SSO sign-in instead of rejecting the login.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Serve the interactive configuration screen before completing the
+    /// sign-in. Turn this off for headless/automated sign-ins, which then get
+    /// the defaults below without a round trip through a form.
+    #[serde(default = "default_true")]
+    pub prompt: bool,
+    /// Roles applied to a provisioned user (both project-level and within this
+    /// tenant). Empty falls back to the role store's default roles.
+    #[serde(default)]
+    pub default_role_names: Vec<String>,
+    /// Custom attributes applied to a provisioned user.
+    #[serde(default)]
+    pub default_custom_attributes: HashMap<String, serde_json::Value>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+impl Default for SsoJitProvisioning {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            prompt: true,
+            default_role_names: Vec::new(),
+            default_custom_attributes: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]

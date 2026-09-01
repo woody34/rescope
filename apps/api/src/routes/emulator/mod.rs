@@ -1,6 +1,7 @@
 pub mod idp_oidc;
 pub mod idp_saml;
 pub mod snapshot;
+pub mod sso_provision;
 
 use axum::{
     extract::{Path, State},
@@ -132,11 +133,17 @@ pub async fn create_tenant(
         "oidc" => AuthType::Oidc,
         _ => AuthType::Saml,
     };
+    // Optional SSO just-in-time provisioning settings — e2e suites turn the
+    // configuration screen off here so an automated sign-in is never
+    // interrupted by a form.
+    let sso_jit_provisioning =
+        serde_json::from_value(body["ssoJitProvisioning"].clone()).unwrap_or(None);
     let tenant = Tenant {
         id: id.clone(),
         name,
         domains,
         auth_type,
+        sso_jit_provisioning,
         ..Default::default()
     };
     state.tenants.write().await.insert(tenant);

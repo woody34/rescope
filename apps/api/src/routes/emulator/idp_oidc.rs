@@ -22,6 +22,8 @@ use std::{
 use crate::{
     error::EmulatorError,
     jwt::key_manager::KeyManager,
+    routes::emulator::sso_provision::ResumeParams,
+    sso_jit::{provision_sso_user_for_tenant, SsoProvisionInput},
     state::EmulatorState,
     store::{idp_store::IdpProtocol, token_store::generate_token},
     types::TokenType,
@@ -138,9 +140,23 @@ pub async fn authorize(
         ));
     }
 
-    // If login_id is provided (programmatic), auto-select the user
+    // If login_id is provided (programmatic, or a return trip from the
+    // configuration screen), auto-select the user.
     if let Some(login_id) = params.login_id {
-        let user = state.users.read().await.load(&login_id)?.clone();
+        let known = state.users.read().await.load(&login_id).ok().cloned();
+        // The IdP is authoritative for whoever it names, so an unknown address
+        // is provisioned into its tenant rather than rejected.
+        let user = match known {
+            Some(user) => user,
+            None => {
+                provision_sso_user_for_tenant(
+                    &state,
+                    &idp.tenant_id,
+                    SsoProvisionInput::new(login_id.clone()),
+                )
+                .await?
+            }
+        };
 
         // Generate OIDC authorization code
         let code = generate_token();
@@ -181,8 +197,30 @@ pub async fn authorize(
             .collect()
     };
 
+    // Anyone on this tenant can sign in, whether or not they exist yet — the
+    // configuration screen creates them and returns here with `login_id`.
+    let new_user_url = {
+        let continue_url = format!(
+            "http://localhost:{}/emulator/idp/{}/authorize?client_id={}&redirect_uri={}&response_type=code&state={}&nonce={}",
+            state.config.port,
+            idp_id,
+            urlencoding::encode(&client_id),
+            urlencoding::encode(&redirect_uri),
+            urlencoding::encode(params.state.as_deref().unwrap_or("")),
+            urlencoding::encode(params.nonce.as_deref().unwrap_or("")),
+        );
+        ResumeParams {
+            email: None,
+            tenant: Some(idp.tenant_id.clone()),
+            mode: Some("continue".into()),
+            redirect_url: None,
+            continue_url: Some(continue_url),
+        }
+        .to_url(state.config.port)
+    };
+
     let user_rows = if users.is_empty() {
-        "<tr><td colspan=\"3\" style=\"text-align:center;padding:2rem;color:#888;\">No users in this tenant</td></tr>".to_string()
+        "<tr><td colspan=\"3\" style=\"text-align:center;padding:2rem;color:#888;\">No users yet — sign in as a new one below</td></tr>".to_string()
     } else {
         users
             .iter()
@@ -227,6 +265,8 @@ pub async fn authorize(
   td{{padding:.75rem .5rem;border-bottom:1px solid #21262d}}
   .btn{{display:inline-block;background:#39d353;color:#0d1117;padding:.4rem 1rem;border-radius:6px;text-decoration:none;font-size:.85rem;font-weight:600}}
   .btn:hover{{background:#2ea043}}
+  .new-user{{display:inline-block;margin-top:1.25rem;color:#58a6ff;text-decoration:none;font-size:.85rem}}
+  .new-user:hover{{text-decoration:underline}}
 </style>
 </head>
 <body>
@@ -237,11 +277,13 @@ pub async fn authorize(
     <thead><tr><th>Name</th><th>Email</th><th></th></tr></thead>
     <tbody>{user_rows}</tbody>
   </table>
+  <a class="new-user" href="{new_user_url}">+ Sign in as a new user</a>
 </div>
 </body>
 </html>"#,
         display_name = html_escape(&idp.display_name),
         user_rows = user_rows,
+        new_user_url = html_escape(&new_user_url),
     );
 
     Ok(Html(html).into_response())
@@ -565,6 +607,82 @@ mod tests {
         state.users.write().await.insert(user).unwrap();
 
         "mock-okta".to_string()
+    }
+
+    async fn body_text(resp: Response) -> String {
+        String::from_utf8(
+            axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+        .unwrap()
+    }
+
+    fn authorize_params(login_id: Option<&str>) -> AuthorizeParams {
+        AuthorizeParams {
+            client_id: Some("acme-client".into()),
+            redirect_uri: Some("http://localhost:4600/emulator/idp/callback".into()),
+            response_type: Some("code".into()),
+            scope: None,
+            state: Some("http://localhost:4200/cb".into()),
+            nonce: Some("n1".into()),
+            login_id: login_id.map(str::to_string),
+        }
+    }
+
+    /// Why: before this, only a pre-seeded user could be named at the authorize
+    ///      endpoint — an unknown address failed the whole sign-in, so every SSO
+    ///      login had to be seeded first.
+    /// Decision: the IdP is authoritative for its tenant, so provision the user
+    ///      and continue issuing the authorization code.
+    #[tokio::test]
+    async fn authorize_provisions_an_unknown_login_id() {
+        let state = make_state().await;
+        setup_oidc_idp(&state).await;
+
+        let resp = authorize(
+            AxumState(state.clone()),
+            AxumPath("mock-okta".into()),
+            axum::extract::Query(authorize_params(Some("newcomer@acme.com"))),
+        )
+        .await
+        .unwrap();
+
+        let location = resp
+            .headers()
+            .get(axum::http::header::LOCATION)
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(location.contains("code="));
+
+        let users = state.users.read().await;
+        let user = users.load("newcomer@acme.com").expect("provisioned");
+        assert_eq!(user.status, "enabled");
+        assert_eq!(user.user_tenants[0].tenant_id, "acme");
+    }
+
+    /// Why: the picker only ever listed users that already existed, so a browser
+    ///      sign-in had no way to become someone new.
+    /// Decision: offer a route into the configuration screen that returns here.
+    #[tokio::test]
+    async fn authorize_picker_offers_a_new_user_entry_point() {
+        let state = make_state().await;
+        setup_oidc_idp(&state).await;
+
+        let resp = authorize(
+            AxumState(state),
+            AxumPath("mock-okta".into()),
+            axum::extract::Query(authorize_params(None)),
+        )
+        .await
+        .unwrap();
+
+        let html = body_text(resp).await;
+        assert!(html.contains("Sign in as a new user"));
+        assert!(html.contains("/emulator/sso/provision"));
+        assert!(html.contains("mode=continue"));
     }
 
     #[tokio::test]

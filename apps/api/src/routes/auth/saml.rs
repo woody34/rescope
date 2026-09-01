@@ -10,9 +10,11 @@ use crate::{
     cookies::build_auth_cookies,
     error::EmulatorError,
     jwt::token_generator::{generate_refresh_jwt, generate_session_jwt},
+    routes::emulator::sso_provision::ResumeParams,
+    sso_jit::{normalize_email, provision_sso_user, SsoProvisionInput},
     state::EmulatorState,
     store::token_store::generate_token,
-    types::{AuthType, TokenType},
+    types::{AuthType, Tenant, TokenType},
 };
 
 // ─── SAML Start ───────────────────────────────────────────────────────────────
@@ -25,6 +27,10 @@ pub struct SamlStartRequest {
     pub redirect_url: Option<String>,
     #[serde(alias = "loginHint")]
     pub login_hint: Option<String>,
+    /// Override the tenant's `ssoJitProvisioning.prompt` for this sign-in.
+    /// Set to `false` for an automated sign-in that wants the provisioned
+    /// defaults and a code straight away, with no configuration screen.
+    pub sso_jit_prompt: Option<bool>,
 }
 
 /// All-optional version for query params and empty-body fallback.
@@ -37,6 +43,7 @@ pub struct SamlStartQueryParams {
     pub redirect_url: Option<String>,
     #[serde(alias = "loginHint")]
     pub login_hint: Option<String>,
+    pub sso_jit_prompt: Option<bool>,
 }
 
 /// POST handler — reads query params first, then merges/falls back to JSON body.
@@ -53,6 +60,7 @@ pub async fn start(
         },
         redirect_url: query.redirect_url.or(body.redirect_url),
         login_hint: query.login_hint.or(body.login_hint),
+        sso_jit_prompt: query.sso_jit_prompt.or(body.sso_jit_prompt),
     };
     start_impl(state, req).await
 }
@@ -69,31 +77,82 @@ async fn start_impl(
     state: EmulatorState,
     req: SamlStartRequest,
 ) -> Result<Json<Value>, EmulatorError> {
-    // Dual resolution: email → find user → find tenant; else tenant ID
-    let tenant_id = if req.tenant.contains('@') {
-        // Lookup user's SAML tenant by email domain
-        let tenants = state.tenants.read().await;
-        let tenant = tenants.find_by_email(&req.tenant)?;
-        // Also verify user exists
-        let users = state.users.read().await;
-        users.load(&req.tenant)?;
-        tenant.id.clone()
+    let redirect_url = req.redirect_url.clone().unwrap_or_default();
+
+    // Dual resolution: an email resolves its tenant by domain; anything else is
+    // a tenant ID.
+    let tenant: Tenant = if req.tenant.contains('@') {
+        state
+            .tenants
+            .read()
+            .await
+            .find_by_email(&req.tenant)?
+            .clone()
     } else {
-        // Tenant ID direct lookup
-        let tenants = state.tenants.read().await;
-        let tenant = tenants.load(&req.tenant)?;
+        let tenant = state.tenants.read().await.load(&req.tenant)?.clone();
         if tenant.auth_type != AuthType::Saml && tenant.auth_type != AuthType::Oidc {
             return Err(EmulatorError::NotSsoUser);
         }
-        tenant.id.clone()
+        tenant
     };
 
-    // Find first user in this tenant or use the email as user lookup
-    let user_id = if req.tenant.contains('@') {
-        state.users.read().await.load(&req.tenant)?.user_id.clone()
-    } else {
-        // Without an email we cannot resolve to a specific user — return a tenant-level code
-        format!("tenant:{}", tenant_id)
+    // Started with a tenant ID and no email, so there is nobody to sign in yet.
+    // Real Descope hands off to the IdP, which asks who is signing in; the
+    // configuration screen is where the emulator asks the same question.
+    if !req.tenant.contains('@') {
+        if !tenant.sso_jit().enabled {
+            // Pre-existing behavior: a tenant-level code that exchange rejects.
+            let code = generate_token();
+            state.tokens.write().await.insert(
+                code.clone(),
+                format!("tenant:{}", tenant.id),
+                TokenType::Saml,
+            );
+            return Ok(Json(
+                json!({ "url": format!("{redirect_url}?code={code}") }),
+            ));
+        }
+        let params = ResumeParams {
+            email: None,
+            tenant: Some(tenant.id.clone()),
+            mode: Some("code".into()),
+            redirect_url: Some(redirect_url),
+            continue_url: None,
+        };
+        return Ok(Json(json!({ "url": params.to_url(state.config.port) })));
+    }
+
+    let user_id = match state.users.read().await.load(&req.tenant) {
+        Ok(user) => Some(user.user_id.clone()),
+        Err(_) => None,
+    };
+
+    let user_id = match user_id {
+        Some(user_id) => user_id,
+        None => {
+            let jit = tenant.sso_jit();
+            if !jit.enabled {
+                return Err(EmulatorError::UserNotFound);
+            }
+            let email = normalize_email(&req.tenant).ok_or(EmulatorError::UserNotFound)?;
+
+            // Ask how the new user should be configured unless this sign-in
+            // opted out, or the tenant did.
+            if req.sso_jit_prompt.unwrap_or(jit.prompt) {
+                let params = ResumeParams {
+                    email: Some(email),
+                    tenant: Some(tenant.id.clone()),
+                    mode: Some("code".into()),
+                    redirect_url: Some(redirect_url),
+                    continue_url: None,
+                };
+                return Ok(Json(json!({ "url": params.to_url(state.config.port) })));
+            }
+
+            provision_sso_user(&state, &tenant, SsoProvisionInput::new(email))
+                .await?
+                .user_id
+        }
     };
 
     let code = generate_token();
@@ -103,10 +162,9 @@ async fn start_impl(
         .await
         .insert(code.clone(), user_id, TokenType::Saml);
 
-    let redirect_url = req.redirect_url.unwrap_or_default();
-    let url = format!("{redirect_url}?code={code}");
-
-    Ok(Json(json!({ "url": url })))
+    Ok(Json(
+        json!({ "url": format!("{redirect_url}?code={code}") }),
+    ))
 }
 
 // ─── SAML Exchange ────────────────────────────────────────────────────────────
@@ -177,4 +235,166 @@ pub async fn exchange(
     let _ = state.users.write().await.record_login_by_user_id(&user_id);
 
     Ok((cookies, Json(body)))
+}
+
+// ─── Tests ───────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        config::EmulatorConfig,
+        extractor::PermissiveJson,
+        store::user_store::new_user_id,
+        types::{SsoJitProvisioning, User},
+    };
+
+    async fn make_state() -> EmulatorState {
+        let state = EmulatorState::new(&EmulatorConfig::default())
+            .await
+            .unwrap();
+        state.tenants.write().await.insert(Tenant {
+            id: "acme".into(),
+            name: "Acme".into(),
+            domains: vec!["acme.test".into()],
+            auth_type: AuthType::Saml,
+            ..Default::default()
+        });
+        state
+    }
+
+    fn start_request(tenant: &str, sso_jit_prompt: Option<bool>) -> SamlStartRequest {
+        SamlStartRequest {
+            tenant: tenant.into(),
+            redirect_url: Some("http://localhost:4200/login/sso".into()),
+            login_hint: None,
+            sso_jit_prompt,
+        }
+    }
+
+    async fn seed_user(state: &EmulatorState, login_id: &str) {
+        let user = User {
+            user_id: new_user_id(),
+            login_ids: vec![login_id.into()],
+            email: Some(login_id.into()),
+            status: "enabled".into(),
+            ..Default::default()
+        };
+        state.users.write().await.insert(user).unwrap();
+    }
+
+    /// Why: an address the emulator has never seen is the whole point — before
+    ///      this it was rejected outright, so only pre-seeded users could use
+    ///      SSO. In a browser the sign-in should continue, not fail.
+    /// Decision: hand back the configuration screen's URL, which the SDK
+    ///      navigates to exactly like a real IdP's.
+    #[tokio::test]
+    async fn unknown_email_on_an_sso_domain_starts_the_configuration_screen() {
+        let state = make_state().await;
+
+        let resp = start_impl(state, start_request("Newcomer@acme.test", None))
+            .await
+            .unwrap();
+
+        let url = resp.0["url"].as_str().unwrap();
+        assert!(url.contains("/emulator/sso/provision"));
+        assert!(url.contains("email=newcomer%40acme.test"));
+        assert!(url.contains("tenant=acme"));
+        assert!(url.contains("redirectUrl=http%3A%2F%2Flocalhost%3A4200%2Flogin%2Fsso"));
+    }
+
+    /// Why: automated sign-ins cannot fill in a form, and must still get a
+    ///      usable session for a brand-new address.
+    /// Decision: `ssoJitPrompt: false` provisions with the defaults and returns
+    ///      the same `?code=` redirect an existing user would get — and that
+    ///      code exchanges into a session for the newly created user.
+    #[tokio::test]
+    async fn prompt_disabled_provisions_and_returns_an_exchangeable_code() {
+        let state = make_state().await;
+
+        let resp = start_impl(state.clone(), start_request("auto@acme.test", Some(false)))
+            .await
+            .unwrap();
+        let url = resp.0["url"].as_str().unwrap().to_string();
+        assert!(url.starts_with("http://localhost:4200/login/sso?code="));
+
+        let code = url.split("code=").nth(1).unwrap().to_string();
+        let (_, body) = exchange(
+            axum::extract::State(state.clone()),
+            PermissiveJson(SamlExchangeRequest { code }),
+        )
+        .await
+        .unwrap();
+
+        assert!(!body.0["sessionJwt"].as_str().unwrap().is_empty());
+        assert_eq!(body.0["user"]["email"], "auto@acme.test");
+        assert_eq!(body.0["user"]["status"], "enabled");
+        assert_eq!(body.0["user"]["userTenants"][0]["tenantId"], "acme");
+    }
+
+    /// Why: a tenant must be able to keep the strict behavior, so suites that
+    ///      assert on a rejected unknown user do not silently start passing.
+    /// Decision: `ssoJitProvisioning.enabled: false` restores "user not found".
+    #[tokio::test]
+    async fn provisioning_disabled_still_rejects_an_unknown_user() {
+        let state = make_state().await;
+        let mut tenant = state.tenants.read().await.load("acme").unwrap().clone();
+        tenant.sso_jit_provisioning = Some(SsoJitProvisioning {
+            enabled: false,
+            ..Default::default()
+        });
+        state.tenants.write().await.insert(tenant);
+
+        let err = start_impl(state, start_request("nobody@acme.test", None))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, EmulatorError::UserNotFound));
+    }
+
+    /// Why: provisioning is scoped to SSO tenants — an address on a domain no
+    ///      tenant claims is not an SSO login at all.
+    /// Decision: keep returning "tenant not found" rather than creating a user.
+    #[tokio::test]
+    async fn an_email_on_an_unclaimed_domain_is_still_rejected() {
+        let state = make_state().await;
+        let err = start_impl(state, start_request("someone@elsewhere.test", None))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, EmulatorError::TenantNotFound));
+    }
+
+    /// Why: existing users must keep the direct redirect — an interstitial for
+    ///      them would break every sign-in that already works.
+    /// Decision: only an unknown login ID reaches the configuration screen.
+    #[tokio::test]
+    async fn a_known_user_still_gets_a_direct_code_redirect() {
+        let state = make_state().await;
+        seed_user(&state, "known@acme.test").await;
+
+        let resp = start_impl(state, start_request("known@acme.test", None))
+            .await
+            .unwrap();
+
+        let url = resp.0["url"].as_str().unwrap();
+        assert!(url.starts_with("http://localhost:4200/login/sso?code="));
+        assert!(!url.contains("/emulator/sso/provision"));
+    }
+
+    /// Why: starting from a tenant ID names no user, so the emulator used to
+    ///      mint a `tenant:<id>` code that exchange always rejected — a dead end.
+    /// Decision: send the browser to the configuration screen, which asks who is
+    ///      signing in and then resumes with a real code.
+    #[tokio::test]
+    async fn a_tenant_id_start_opens_the_configuration_screen() {
+        let state = make_state().await;
+
+        let resp = start_impl(state, start_request("acme", None))
+            .await
+            .unwrap();
+
+        let url = resp.0["url"].as_str().unwrap();
+        assert!(url.contains("/emulator/sso/provision"));
+        assert!(url.contains("tenant=acme"));
+        assert!(!url.contains("email="));
+    }
 }

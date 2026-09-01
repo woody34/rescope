@@ -18,6 +18,10 @@ use uuid::Uuid;
 
 use crate::{
     error::EmulatorError,
+    routes::emulator::sso_provision::ResumeParams,
+    sso_jit::{
+        normalize_email, provision_sso_user_for_tenant, resolve_sso_tenant, SsoProvisionInput,
+    },
     state::EmulatorState,
     store::{idp_store::IdpProtocol, token_store::generate_token},
     types::TokenType,
@@ -208,9 +212,27 @@ pub async fn sso(
             })
     };
 
-    // If login_id is provided (programmatic), generate SAML Response immediately
+    // If login_id is provided (programmatic, or a return trip from the
+    // configuration screen), generate SAML Response immediately.
     if let Some(login_id) = params.login_id {
-        let user = state.users.read().await.load(&login_id)?.clone();
+        let user = match state.users.read().await.load(&login_id) {
+            Ok(user) => Some(user.clone()),
+            Err(_) => None,
+        };
+        // An identity provider is authoritative for whoever it asserts, so an
+        // address this emulator has not seen is provisioned into the IdP's
+        // tenant rather than rejected.
+        let user = match user {
+            Some(user) => user,
+            None => {
+                provision_sso_user_for_tenant(
+                    &state,
+                    &idp.tenant_id,
+                    SsoProvisionInput::new(login_id.clone()),
+                )
+                .await?
+            }
+        };
 
         let base = format!(
             "http://localhost:{}/emulator/idp/{}",
@@ -243,8 +265,27 @@ pub async fn sso(
             .collect()
     };
 
+    // Anyone on this tenant can sign in, whether or not they exist yet — the
+    // configuration screen creates them and returns here with `login_id`.
+    let new_user_url = {
+        let continue_url = format!(
+            "http://localhost:{}/emulator/idp/{}/sso?RelayState={}",
+            state.config.port,
+            idp_id,
+            urlencoding::encode(&relay_state)
+        );
+        ResumeParams {
+            email: None,
+            tenant: Some(idp.tenant_id.clone()),
+            mode: Some("continue".into()),
+            redirect_url: None,
+            continue_url: Some(continue_url),
+        }
+        .to_url(state.config.port)
+    };
+
     let user_rows = if users.is_empty() {
-        "<tr><td colspan=\"3\" style=\"text-align:center;padding:2rem;color:#888;\">No users in this tenant</td></tr>".to_string()
+        "<tr><td colspan=\"3\" style=\"text-align:center;padding:2rem;color:#888;\">No users yet — sign in as a new one below</td></tr>".to_string()
     } else {
         users
             .iter()
@@ -287,6 +328,8 @@ pub async fn sso(
   td{{padding:.75rem .5rem;border-bottom:1px solid #21262d}}
   .btn{{display:inline-block;background:#39d353;color:#0d1117;padding:.4rem 1rem;border-radius:6px;text-decoration:none;font-size:.85rem;font-weight:600}}
   .btn:hover{{background:#2ea043}}
+  .new-user{{display:inline-block;margin-top:1.25rem;color:#58a6ff;text-decoration:none;font-size:.85rem}}
+  .new-user:hover{{text-decoration:underline}}
 </style>
 </head>
 <body>
@@ -297,11 +340,13 @@ pub async fn sso(
     <thead><tr><th>Name</th><th>Email</th><th></th></tr></thead>
     <tbody>{user_rows}</tbody>
   </table>
+  <a class="new-user" href="{new_user_url}">+ Sign in as a new user</a>
 </div>
 </body>
 </html>"#,
         display_name = xml_escape(&idp.display_name),
         user_rows = user_rows,
+        new_user_url = xml_escape(&new_user_url),
     );
 
     Ok(Html(html).into_response())
@@ -339,11 +384,24 @@ pub async fn saml_acs(
         EmulatorError::ValidationError("Missing NameID in SAML Response".into()),
     )?;
 
-    // Find the user by login_id (NameID)
-    let user_id = {
+    // Find the user by login_id (NameID). An assertion for someone the emulator
+    // has never seen provisions them into the SSO tenant that owns their
+    // domain — the same just-in-time behavior a real deployment has.
+    let known_user_id = {
         let users = state.users.read().await;
-        let user = users.load(&name_id)?;
-        user.user_id.clone()
+        users.load(&name_id).ok().map(|u| u.user_id.clone())
+    };
+    let user_id = match known_user_id {
+        Some(user_id) => user_id,
+        None => {
+            let email = normalize_email(&name_id).ok_or(EmulatorError::UserNotFound)?;
+            let tenant = resolve_sso_tenant(&state, &email)
+                .await
+                .map_err(|_| EmulatorError::UserNotFound)?;
+            crate::sso_jit::provision_sso_user(&state, &tenant, SsoProvisionInput::new(email))
+                .await?
+                .user_id
+        }
     };
 
     // Generate SP code
@@ -549,7 +607,167 @@ fn to_camel_case(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::User;
+    use crate::{
+        config::EmulatorConfig,
+        store::idp_store::IdpEmulator,
+        types::{AuthType, Tenant, User},
+    };
+    use axum::extract::{Path as AxumPath, Query as AxumQuery, State as AxumState};
+
+    async fn make_state() -> EmulatorState {
+        let state = EmulatorState::new(&EmulatorConfig::default())
+            .await
+            .unwrap();
+        state.tenants.write().await.insert(Tenant {
+            id: "acme".into(),
+            name: "Acme".into(),
+            domains: vec!["acme.test".into()],
+            auth_type: AuthType::Saml,
+            ..Default::default()
+        });
+        state
+            .idp_emulators
+            .write()
+            .await
+            .insert(IdpEmulator {
+                id: "mock-idp".into(),
+                protocol: IdpProtocol::Saml,
+                display_name: "Mock IdP".into(),
+                tenant_id: "acme".into(),
+                attribute_mapping: HashMap::new(),
+            })
+            .unwrap();
+        state
+    }
+
+    async fn body_text(resp: Response) -> String {
+        String::from_utf8(
+            axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+        .unwrap()
+    }
+
+    fn sso_params(login_id: Option<&str>) -> SsoParams {
+        SsoParams {
+            saml_request: None,
+            relay_state: Some("http://localhost:4200/cb".into()),
+            login_id: login_id.map(str::to_string),
+        }
+    }
+
+    /// Why: naming an address the emulator has never seen used to fail the whole
+    ///      sign-in, so SSO only worked for pre-seeded users.
+    /// Decision: the IdP is authoritative for its tenant, so provision the user
+    ///      and go on to issue the assertion.
+    #[tokio::test]
+    async fn sso_provisions_an_unknown_login_id_and_still_asserts() {
+        let state = make_state().await;
+
+        let resp = sso(
+            AxumState(state.clone()),
+            AxumPath("mock-idp".into()),
+            AxumQuery(sso_params(Some("newcomer@acme.test"))),
+        )
+        .await
+        .unwrap();
+
+        let html = body_text(resp).await;
+        assert!(html.contains("SAMLResponse"));
+        assert!(html.contains("onload"));
+
+        let users = state.users.read().await;
+        let user = users.load("newcomer@acme.test").expect("provisioned");
+        assert_eq!(user.status, "enabled");
+        assert_eq!(user.user_tenants[0].tenant_id, "acme");
+    }
+
+    /// Why: the picker only listed users that already existed, leaving a browser
+    ///      sign-in no way to become somebody new.
+    /// Decision: link to the configuration screen, which returns here with the
+    ///      new address as `login_id`.
+    #[tokio::test]
+    async fn sso_picker_offers_a_new_user_entry_point() {
+        let state = make_state().await;
+
+        let resp = sso(
+            AxumState(state),
+            AxumPath("mock-idp".into()),
+            AxumQuery(sso_params(None)),
+        )
+        .await
+        .unwrap();
+
+        let html = body_text(resp).await;
+        assert!(html.contains("Sign in as a new user"));
+        assert!(html.contains("/emulator/sso/provision"));
+        assert!(html.contains("mode=continue"));
+    }
+
+    /// Why: an assertion posted straight to the consumer (the shape a real IdP
+    ///      sends) is the other way an unknown user arrives, and it failed the
+    ///      same way.
+    /// Decision: provision from the NameID, into the tenant owning its domain.
+    #[tokio::test]
+    async fn acs_provisions_a_user_named_only_by_the_assertion() {
+        let state = make_state().await;
+        let assertion = generate_saml_response(
+            &User {
+                user_id: "asserted".into(),
+                login_ids: vec!["asserted@acme.test".into()],
+                email: Some("asserted@acme.test".into()),
+                ..Default::default()
+            },
+            "http://idp",
+            "http://acs",
+            &HashMap::new(),
+        )
+        .unwrap();
+        let body = serde_urlencoded::to_string([
+            ("SAMLResponse", STANDARD.encode(&assertion)),
+            ("RelayState", "http://localhost:4200/cb".into()),
+        ])
+        .unwrap();
+
+        let resp = saml_acs(AxumState(state.clone()), body).await.unwrap();
+
+        let location = resp
+            .headers()
+            .get(axum::http::header::LOCATION)
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(location.starts_with("http://localhost:4200/cb?code="));
+
+        let users = state.users.read().await;
+        assert!(users.load("asserted@acme.test").is_ok());
+    }
+
+    /// Why: provisioning is scoped to SSO tenants — an assertion for a domain no
+    ///      tenant claims is not something the emulator can place.
+    /// Decision: keep rejecting it rather than inventing a tenant.
+    #[tokio::test]
+    async fn acs_rejects_an_assertion_for_an_unclaimed_domain() {
+        let state = make_state().await;
+        let assertion = generate_saml_response(
+            &User {
+                user_id: "stranger".into(),
+                login_ids: vec!["stranger@elsewhere.test".into()],
+                ..Default::default()
+            },
+            "http://idp",
+            "http://acs",
+            &HashMap::new(),
+        )
+        .unwrap();
+        let body =
+            serde_urlencoded::to_string([("SAMLResponse", STANDARD.encode(&assertion))]).unwrap();
+
+        let err = saml_acs(AxumState(state), body).await.unwrap_err();
+        assert!(matches!(err, EmulatorError::UserNotFound));
+    }
 
     #[test]
     fn utc_iso_formats_correctly() {

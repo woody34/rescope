@@ -1,6 +1,6 @@
 use crate::{
     error::EmulatorError,
-    types::{AuthType, OidcConfig, SamlConfig, Tenant},
+    types::{AuthType, OidcConfig, SamlConfig, SsoJitProvisioning, Tenant},
 };
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -33,14 +33,14 @@ impl TenantStore {
             .ok_or(EmulatorError::TenantNotFound)
     }
 
-    /// Find the first SAML/OIDC-configured tenant whose domains contain the given email's domain.
+    /// Find the first SAML/OIDC-configured tenant that owns the given email's
+    /// domain, checking both `domains` and `selfProvisioningDomains`.
     pub fn find_by_email(&self, email: &str) -> Result<&Tenant, EmulatorError> {
-        let domain = email.split('@').nth(1).unwrap_or("");
         self.tenants
             .values()
             .find(|t| {
                 (t.auth_type == AuthType::Saml || t.auth_type == AuthType::Oidc)
-                    && t.domains.iter().any(|d| d == domain)
+                    && t.owns_email(email)
             })
             .ok_or(EmulatorError::TenantNotFound)
     }
@@ -136,6 +136,21 @@ impl TenantStore {
         Ok(())
     }
 
+    /// Set the tenant's SSO just-in-time provisioning configuration. Kept out
+    /// of `update`'s argument list, which is already at clippy's limit.
+    pub fn set_sso_jit(
+        &mut self,
+        id: &str,
+        config: SsoJitProvisioning,
+    ) -> Result<(), EmulatorError> {
+        let tenant = self
+            .tenants
+            .get_mut(id)
+            .ok_or(EmulatorError::TenantNotFound)?;
+        tenant.sso_jit_provisioning = Some(config);
+        Ok(())
+    }
+
     /// Delete a tenant by id. Idempotent — no error if not found.
     pub fn delete_tenant(&mut self, id: &str) {
         self.tenants.remove(id);
@@ -184,6 +199,23 @@ mod tests {
         store.insert(saml_tenant("acme", &["acme.com"]));
         let t = store.find_by_email("user@acme.com").unwrap();
         assert_eq!(t.id, "acme");
+    }
+
+    /// Why: a tenant may declare its SSO domains only under
+    ///      `selfProvisioningDomains` (the list real Descope uses to decide
+    ///      whether to provision a user), and such a tenant previously failed
+    ///      email lookup entirely, so no SSO login could resolve it.
+    /// Decision: resolve against both domain lists.
+    #[test]
+    fn find_by_email_matches_self_provisioning_domains() {
+        let mut store = TenantStore::new();
+        let mut t = saml_tenant("selfprov", &[]);
+        t.self_provisioning_domains = vec!["selfprov.test".into()];
+        store.insert(t);
+        assert_eq!(
+            store.find_by_email("new@selfprov.test").unwrap().id,
+            "selfprov"
+        );
     }
 
     #[test]
@@ -293,6 +325,42 @@ mod tests {
             )
             .unwrap_err();
         assert!(matches!(err, EmulatorError::TenantNotFound));
+    }
+
+    /// Why: a project needs a way to turn the configuration screen off (so
+    ///      automated sign-ins are not interrupted) or to disable provisioning
+    ///      entirely, without going through the tenant `update` argument list.
+    /// Decision: a dedicated setter, readable back off the stored tenant.
+    #[test]
+    fn set_sso_jit_stores_the_configuration() {
+        let mut store = TenantStore::new();
+        store
+            .create(Some("jit".into()), "JIT".into(), vec![])
+            .unwrap();
+        store
+            .set_sso_jit(
+                "jit",
+                SsoJitProvisioning {
+                    prompt: false,
+                    default_role_names: vec!["Member".into()],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        let jit = store.load("jit").unwrap().sso_jit();
+        assert!(jit.enabled);
+        assert!(!jit.prompt);
+        assert_eq!(jit.default_role_names, vec!["Member".to_string()]);
+    }
+
+    #[test]
+    fn set_sso_jit_on_unknown_tenant_returns_not_found() {
+        let mut store = TenantStore::new();
+        assert!(matches!(
+            store.set_sso_jit("ghost", SsoJitProvisioning::default()),
+            Err(EmulatorError::TenantNotFound)
+        ));
     }
 
     #[test]

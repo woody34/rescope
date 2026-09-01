@@ -16,6 +16,7 @@ Descope has no local development story: every auth flow requires a live request 
 - **Drop-in API surface** — same HTTP API, JWTs, JWKS, and management endpoints as Descope; existing SDK code works unchanged.
 - **Admin UI** — inspect users, OTP codes, access keys, roles, tenants, and IdPs at `/`.
 - **SSO without an IdP** — built-in OIDC and SAML emulation; no Okta, Azure AD, or Auth0 account required.
+- **Any SSO address signs in** — a first-time user on an SSO tenant's domain is provisioned just in time, with a form for choosing their name, roles, and attributes. See [SSO just-in-time provisioning](#sso-just-in-time-provisioning).
 
 ### A sandbox for AI agents
 
@@ -119,6 +120,63 @@ State is in-memory. Point `DESCOPE_EMULATOR_SEED_FILE` at a JSON file to preload
 }
 ```
 
+## SSO just-in-time provisioning
+
+A real identity provider vouches for anyone in its directory, so every address on
+an SSO tenant's domains can sign in — the user record is created the first time
+they arrive. Rescope does the same: point any `you@your-sso-domain` at an SSO
+tenant and the sign-in completes, whether or not that user was seeded.
+
+Because the emulator has no upstream directory to read attributes from, it asks.
+The first sign-in for an unknown address lands on a configuration screen where
+you set the display name, roles, and custom attributes; submitting it creates the
+user and resumes the sign-in exactly where it left off. It applies to SSO only —
+password, OTP, magic-link, and flow sign-ins still reject an unknown login ID.
+
+This works from every SSO surface: `POST /v1/auth/saml/start` (and its
+`sso/authorize` alias), the SAML identity-provider emulator and its assertion
+consumer, and the OIDC `authorize` endpoint. The SAML and OIDC user pickers gain
+a **Sign in as a new user** link into the same screen.
+
+### Skipping the screen
+
+Automated sign-ins cannot fill in a form. Either pass `ssoJitPrompt: false` on
+the start request:
+
+```bash
+curl -X POST http://localhost:4600/v1/auth/saml/start \
+  -H 'Content-Type: application/json' \
+  -d '{"tenant":"newcomer@acme.example","redirectUrl":"http://localhost:4200/login/sso","ssoJitPrompt":false}'
+# → { "url": "http://localhost:4200/login/sso?code=…" }
+```
+
+…or configure the tenant once, which also sets what a provisioned user gets:
+
+```jsonc
+{
+  "id": "acme",
+  "name": "Acme Corp",
+  "domains": ["acme.example"],
+  "authType": "saml",
+  "ssoJitProvisioning": {
+    "enabled": true,             // false restores the old "user not found"
+    "prompt": false,             // skip the configuration screen
+    "defaultRoleNames": ["Member"],
+    "defaultCustomAttributes": { "department": "engineering" }
+  }
+}
+```
+
+Accepted by `POST /emulator/tenant`, `POST /v1/mgmt/tenant/create`, and
+`POST /v1/mgmt/tenant/update`. Omitting the object means enabled, with the
+screen — so tenants seeded before this existed get the permissive behavior.
+
+A provisioned user is active (`status: "enabled"`) with a verified email, a
+display name derived from the address (`jane.doe@…` → "Jane Doe"), membership in
+the tenant that vouched for them, and roles taken from the sign-in, then the
+tenant defaults, then the project's default roles. Provisioning never overwrites
+a user who already exists.
+
 ## Management Auth
 
 Send `Authorization: Bearer <project_id>:<management_key>` on every `/v1/mgmt/…` request (default `emulator-project:emulator-key`). Unlike production, the emulator lets unauthenticated management requests through — only *invalid* credentials return `401`.
@@ -165,6 +223,8 @@ Rescope implements the Descope HTTP surface — auth, session, and management en
 | `POST` | `/emulator/reset` | Reset all runtime state (+ re-apply seed) |
 | `GET`  | `/emulator/otp/:login_id` | Get pending OTP code for a login ID |
 | `POST` | `/emulator/tenant` | Create a tenant directly (escape hatch) |
+| `GET`  | `/emulator/sso/provision` | Configuration screen for a first-time SSO user |
+| `POST` | `/emulator/sso/provision` | Create that user and resume the sign-in |
 | `GET`  | `/emulator/otps` | List all pending OTP codes (userId→code) |
 | `GET`  | `/emulator/snapshot` | Export full emulator state as JSON |
 | `POST` | `/emulator/snapshot` | Import / restore a previously exported state |
@@ -214,7 +274,7 @@ Rescope implements the Descope HTTP surface — auth, session, and management en
 
 | Method | Path | Description |
 | ------ | -------------------------- | --------------------------------------- |
-| `POST` | `/v1/auth/saml/start` | Start SAML flow (returns `?code=…` URL) |
+| `POST` | `/v1/auth/saml/start` | Start SAML flow (returns `?code=…` URL, or the configuration screen for a first-time user) |
 | `POST` | `/v1/auth/saml/authorize` | Alias for saml/start |
 | `POST` | `/v1/auth/saml/exchange` | Exchange SAML code → session |
 | `POST` | `/v1/auth/sso/authorize` | Alias for saml/start (SSO path) |
