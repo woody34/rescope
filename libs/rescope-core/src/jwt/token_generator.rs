@@ -231,6 +231,72 @@ mod tests {
         RoleStore::new()
     }
 
+    fn payload_of(jwt: &str) -> serde_json::Value {
+        let part = jwt.split('.').nth(1).unwrap();
+        let decoded = String::from_utf8(
+            base64::engine::general_purpose::URL_SAFE_NO_PAD
+                .decode(part)
+                .unwrap(),
+        )
+        .unwrap();
+        serde_json::from_str(&decoded).unwrap()
+    }
+
+    /// Why: a just-in-time provisioned SSO user has no `uid` custom attribute
+    /// yet. Apps read that claim to decide whether the user already exists on
+    /// their side, and fall back to the Descope id when it is absent — but a
+    /// fabricated `uid: ""` is not nullish, so the fallback never fires and the
+    /// user is written back with a blank uid, wedging every later sign-in.
+    ///
+    /// Decision: an unset custom attribute is omitted from the session JWT
+    /// entirely, the way Descope omits it, rather than serialized as "".
+    #[test]
+    fn session_jwt_omits_unset_custom_attribute_claims() {
+        let km = test_km();
+        let jwt =
+            generate_session_jwt(&km, &test_user(), "proj", 3600, None, &empty_roles(), "saml")
+                .unwrap();
+
+        let payload = payload_of(&jwt);
+        let obj = payload.as_object().unwrap();
+        assert!(!obj.contains_key("uid"), "unset uid must not be emitted");
+        assert!(
+            !obj.contains_key("username"),
+            "unset username must not be emitted"
+        );
+        assert!(
+            !obj.contains_key("company"),
+            "unset company must not be emitted"
+        );
+    }
+
+    /// Why: omitting unset attributes must not start omitting real ones — the
+    /// claim has to survive for every user who actually has a uid.
+    ///
+    /// Decision: only empty values are dropped; a populated custom attribute is
+    /// emitted verbatim.
+    #[test]
+    fn session_jwt_still_emits_populated_custom_attribute_claims() {
+        let km = test_km();
+        let mut user = test_user();
+        user.custom_attributes.insert(
+            "uid".into(),
+            serde_json::Value::String("TJdYhndjlT4Nic3f19Unr0LkYfDc".into()),
+        );
+        user.custom_attributes
+            .insert("company".into(), serde_json::Value::String("rfx".into()));
+
+        let jwt = generate_session_jwt(&km, &user, "proj", 3600, None, &empty_roles(), "saml")
+            .unwrap();
+
+        let payload = payload_of(&jwt);
+        assert_eq!(
+            payload["uid"].as_str().unwrap(),
+            "TJdYhndjlT4Nic3f19Unr0LkYfDc"
+        );
+        assert_eq!(payload["company"].as_str().unwrap(), "rfx");
+    }
+
     #[test]
     fn session_jwt_has_correct_alg_and_kid() {
         let km = test_km();

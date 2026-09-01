@@ -440,8 +440,16 @@ pub struct SessionClaims {
     pub phone: String,
     pub phone_verified: bool,
     pub name: String,
+    /// Custom attributes the emulator was never given are omitted rather than
+    /// serialized as "". Descope leaves an unset attribute out of the token,
+    /// and apps rely on that: they read the absence as "not provisioned yet"
+    /// and fall back to the Descope id. An empty string is not nullish, so it
+    /// silently defeats those fallbacks.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub username: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub company: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub uid: String,
     pub photo_url: String,
     #[serde(rename = "super")]
