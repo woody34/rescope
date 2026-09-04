@@ -395,6 +395,24 @@ Rescope implements the Descope HTTP surface — auth, session, and management en
 | `POST` | `/v1/mgmt/jwt/template/set-active` | Set the active JWT template |
 | `GET`  | `/v1/mgmt/jwt/template/active` | Get the currently active template |
 
+### Management — Impersonation
+
+| Method | Path | Description |
+| ------ | ------------------------------ | ---------------------------------- |
+| `POST` | `/v1/mgmt/impersonate` | Issue a session token for another user |
+| `POST` | `/v1/mgmt/stop/impersonation` | Return a session token to the actor |
+
+The impersonated token carries the actor in Descope's `act` claim, shape
+`{"act": {"sub": "<impersonatorId>"}}`. Its presence is what marks a session as
+impersonated; the token returned by stop carries no `act` claim, which is how a
+client detects the return leg.
+
+Three request fields are accepted for wire compatibility and are not enforced:
+`validateConsent` (no consent store exists), `selectedTenant` (the subject's
+full tenant set is issued regardless), and `refreshDuration`, which Descope
+names the refresh-token duration but which lands here on the session token,
+since this emulator deals in session tokens throughout.
+
 ### Management — Connectors
 
 | Method | Path | Description |
