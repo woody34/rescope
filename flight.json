@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "repository": "woody34/rescope",
+  "defaultBase": "main",
+  "releaseBranch": null,
+  "prPolicy": {
+    "feature": ["main"],
+    "bug": ["main"]
+  },
+  "quality": {
+    "test": ["cargo test --manifest-path apps/api/Cargo.toml --lib"],
+    "lint": [
+      "cargo clippy --manifest-path apps/api/Cargo.toml -- -D warnings",
+      "cargo fmt --manifest-path apps/api/Cargo.toml --check"
+    ]
+  },
+  "concurrency": { "maxWorktrees": 1, "serializedSuites": ["integration"] },
+  "knownFlakes": [],
+  "ceilings": {
+    "reviewFixCycles": 3,
+    "ciUnchangedRetries": 2,
+    "ciFixIterations": 5,
+    "wallClockMinutes": 240
+  }
+}

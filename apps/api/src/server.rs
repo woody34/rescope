@@ -405,6 +405,14 @@ pub fn build_router(state: EmulatorState) -> Router {
             "/v1/mgmt/jwt/update",
             post(crate::routes::mgmt::jwt::update),
         )
+        .route(
+            "/v1/mgmt/impersonate",
+            post(crate::routes::mgmt::jwt::impersonate),
+        )
+        .route(
+            "/v1/mgmt/stop/impersonation",
+            post(crate::routes::mgmt::jwt::stop_impersonation),
+        )
         // ── Mgmt: Permissions ─────────────────────────────────────────
         .route(
             "/v1/mgmt/authz/permission",

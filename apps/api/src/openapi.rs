@@ -323,6 +323,28 @@ fn add_mgmt_users(p: &mut Map<String, Value>) {
             "{ jwt, customClaims }",
         ),
     );
+    merge_into(
+        p,
+        "/v1/mgmt/impersonate",
+        post_op(
+            "impersonate",
+            "Impersonate a user",
+            "Issues a session token for `loginId` carrying the impersonator in the `act` claim, shape `{ \"act\": { \"sub\": \"<impersonatorId>\" } }`.\n\n`validateConsent` is accepted for wire compatibility and is not enforced by the emulator.",
+            t,
+            "{ impersonatorId, loginId, validateConsent, customClaims, selectedTenant, refreshDuration }",
+        ),
+    );
+    merge_into(
+        p,
+        "/v1/mgmt/stop/impersonation",
+        post_op(
+            "stopImpersonation",
+            "Stop impersonating",
+            "Exchanges an impersonated session token for one belonging to the actor named in its `act.sub` claim. The returned token carries no `act` claim.",
+            t,
+            "{ jwt, customClaims, selectedTenant, refreshDuration }",
+        ),
+    );
 }
 
 fn add_mgmt_user_roles(p: &mut Map<String, Value>) {

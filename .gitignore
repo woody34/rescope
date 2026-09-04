@@ -9,3 +9,7 @@ target/cov-build
 **/.env
 dist
 .claude/settings.json
+
+# Feature Flight run state (referee-owned, never committed)
+.flight/
+.flight-manifest.json
