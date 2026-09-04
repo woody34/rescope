@@ -103,12 +103,24 @@ pub fn validate_custom_claims(claims: &HashMap<String, Value>) -> Result<(), Emu
 pub struct ImpersonateRequest {
     pub impersonator_id: String,
     pub login_id: String,
+    /// Accepted for wire compatibility. Descope refuses without the subject's
+    /// consent when this is set; the emulator models no consent store, so the
+    /// field is read and not enforced.
     #[serde(default)]
     pub validate_consent: Option<bool>,
     #[serde(default)]
     pub custom_claims: Option<HashMap<String, Value>>,
+    /// Accepted for wire compatibility. Descope narrows the issued token's
+    /// tenant claims to this tenant; the emulator issues the subject's full
+    /// tenant set regardless. A test that depends on tenant narrowing will
+    /// not reproduce Descope here.
     #[serde(default)]
     pub selected_tenant: Option<String>,
+    /// Applied as the issued token's lifetime in seconds. Descope names this
+    /// the refresh-token duration and returns a refresh JWT; this emulator
+    /// deals in session tokens throughout, like the `jwt/update` route above,
+    /// so the value lands on the session token instead. That is what makes an
+    /// expiry test possible locally, and it is a deliberate divergence.
     #[serde(default)]
     pub refresh_duration: Option<u64>,
 }
@@ -158,8 +170,12 @@ pub struct StopImpersonationRequest {
     pub jwt: String,
     #[serde(default)]
     pub custom_claims: Option<HashMap<String, Value>>,
+    /// Accepted for wire compatibility, not enforced. See
+    /// [`ImpersonateRequest::selected_tenant`].
     #[serde(default)]
     pub selected_tenant: Option<String>,
+    /// Applied as the issued token's lifetime in seconds. See
+    /// [`ImpersonateRequest::refresh_duration`].
     #[serde(default)]
     pub refresh_duration: Option<u64>,
 }
