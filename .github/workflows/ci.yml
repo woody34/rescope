@@ -68,6 +68,8 @@ jobs:
         run: cargo build --manifest-path apps/api/Cargo.toml --release
       - name: Run integration tests
         run: npx nx test integration-api
+        env:
+          DESCOPE_EMULATOR_BIN: ${{ github.workspace }}/target/release/rescope
 
   test-sdk-nodejs:
     name: Node SDK Integration Tests
@@ -89,7 +91,5 @@ jobs:
         run: cargo build --manifest-path apps/api/Cargo.toml --release
       - name: Run Node SDK integration tests
         run: npx nx test integration-sdk-nodejs
-        env:
-          DESCOPE_EMULATOR_BIN: ${{ github.workspace }}/target/release/rescope
         env:
           DESCOPE_EMULATOR_BIN: ${{ github.workspace }}/target/release/rescope
