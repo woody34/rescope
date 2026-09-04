@@ -159,8 +159,15 @@ describe("management.user.updateLoginId", () => {
     const good = await sdk.management.user.load(newLogin);
     expect(good.ok).toBe(true);
 
-    const bad = await sdk.management.user.load(oldLogin);
-    expect(bad.ok).toBe(false);
+    // The old value still resolves, and that is correct. `user.load` resolves a
+    // user by email and by bare username prefix as well as by exact login id,
+    // and this user was created with `email: oldLogin`, so renaming the login id
+    // leaves the email index still pointing at them. Real Descope behaves the
+    // same way; asserting a refusal here encoded a false expectation about it.
+    // Renaming the login id is proven by `newLogin` resolving, above.
+    const byOldEmail = await sdk.management.user.load(oldLogin);
+    expect(byOldEmail.ok).toBe(true);
+    expect(byOldEmail.data?.userId).toBe(good.data?.userId);
   });
 });
 
@@ -309,5 +316,140 @@ describe("management.jwt.update", () => {
       Buffer.from(newJwt.split(".")[1], "base64url").toString()
     );
     expect(payload.appRole).toBe("admin");
+  });
+});
+
+
+// ─── Impersonation ────────────────────────────────────────────────────────────
+
+/**
+ * Why: the Rust unit tests call the handlers as functions, so they prove the
+ * logic and nothing about the wire. These drive the real `@descope/node-sdk`
+ * over HTTP, which is the only thing that proves the SDK's request body reaches
+ * our serde structs, that our response deserialises into what the SDK's callers
+ * read, and that the routes are actually registered on the router.
+ *
+ * Decision: assert on decoded claim VALUES, never on `ok` alone. A route that
+ * 404s makes `data.jwt` undefined and the decode throw, so none of these can
+ * pass vacuously against a build without the endpoints.
+ */
+describe("management.jwt.impersonate", () => {
+  /** Decode a JWT payload. No verification: these assert claim content only. */
+  const claimsOf = (jwt: string): Record<string, any> =>
+    JSON.parse(Buffer.from(jwt.split(".")[1], "base64url").toString());
+
+  /** Create a user through the SDK and return its Descope user id. */
+  async function createUser(sdk: ReturnType<typeof createClient>, prefix: string) {
+    const login = uniqueLogin(prefix);
+    const res = await sdk.management.user.create(login, { email: login });
+    expect(res.ok).toBe(true);
+    const userId = (res.data as Record<string, unknown>)?.userId as string;
+    expect(userId).toBeTruthy();
+    return { login, userId };
+  }
+
+  it("issues a token for the subject carrying the actor in act.sub", async () => {
+    const sdk = createClient();
+    const actor = await createUser(sdk, "imp-actor");
+    const subject = await createUser(sdk, "imp-subject");
+
+    const res = await sdk.management.jwt.impersonate(actor.userId, subject.login, false);
+
+    expect(res.ok).toBe(true);
+    const claims = claimsOf(res.data?.jwt as string);
+    expect(claims.sub).toBe(subject.userId);
+    expect(claims.act).toEqual({ sub: actor.userId });
+  });
+
+  it("round-trips back to the actor with no act claim", async () => {
+    const sdk = createClient();
+    const actor = await createUser(sdk, "rt-actor");
+    const subject = await createUser(sdk, "rt-subject");
+
+    const impersonated = await sdk.management.jwt.impersonate(
+      actor.userId,
+      subject.login,
+      false
+    );
+    expect(impersonated.ok).toBe(true);
+
+    const stopped = await sdk.management.jwt.stopImpersonation(
+      impersonated.data?.jwt as string
+    );
+
+    expect(stopped.ok).toBe(true);
+    const claims = claimsOf(stopped.data?.jwt as string);
+    expect(claims.sub).toBe(actor.userId);
+    expect(claims.act).toBeUndefined();
+  });
+
+  it("carries customClaims alongside act rather than replacing it", async () => {
+    const sdk = createClient();
+    const actor = await createUser(sdk, "cc-actor");
+    const subject = await createUser(sdk, "cc-subject");
+
+    const res = await sdk.management.jwt.impersonate(
+      actor.userId,
+      subject.login,
+      false,
+      { supportCase: "ENG-2401" }
+    );
+
+    expect(res.ok).toBe(true);
+    const claims = claimsOf(res.data?.jwt as string);
+    expect(claims.supportCase).toBe("ENG-2401");
+    expect(claims.act).toEqual({ sub: actor.userId });
+  });
+
+  /**
+   * Why: ENG-2369 budgets an impersonation credential at 60 minutes and needs a
+   * way to observe expiry locally. That only works if refreshDuration reaches
+   * the issued token's lifetime, which is this emulator's deliberate divergence
+   * from Descope, where the same argument sizes a refresh token.
+   */
+  it("applies refreshDuration to the issued token's lifetime", async () => {
+    const sdk = createClient();
+    const actor = await createUser(sdk, "ttl-actor");
+    const subject = await createUser(sdk, "ttl-subject");
+
+    const res = await sdk.management.jwt.impersonate(
+      actor.userId,
+      subject.login,
+      false,
+      undefined,
+      undefined,
+      60
+    );
+
+    expect(res.ok).toBe(true);
+    const claims = claimsOf(res.data?.jwt as string);
+    expect(claims.exp - claims.iat).toBe(60);
+  });
+
+  it("refuses a login id no user holds", async () => {
+    const sdk = createClient();
+    const actor = await createUser(sdk, "unknown-actor");
+
+    const res = await sdk.management.jwt.impersonate(
+      actor.userId,
+      "nobody@sdk.example",
+      false
+    );
+
+    expect(res.ok).toBe(false);
+    expect(res.data?.jwt).toBeUndefined();
+  });
+
+  it("refuses stopping impersonation on an ordinary session token", async () => {
+    const sdk = createClient();
+    const login = uniqueLogin("plain");
+    const signup = await sdk.password.signUp(login, "Pass1!", { email: login });
+    const sessionJwt = signup.data?.sessionJwt as string;
+    expect(sessionJwt).toBeTruthy();
+
+    const res = await sdk.management.jwt.stopImpersonation(sessionJwt);
+
+    expect(res.ok).toBe(false);
+    expect(res.data?.jwt).toBeUndefined();
   });
 });
