@@ -10,7 +10,10 @@ use crate::{
     cookies::build_auth_cookies,
     error::EmulatorError,
     jwt::{
-        token_generator::{generate_refresh_jwt, generate_session_jwt},
+        token_generator::{
+            generate_impersonated_refresh_jwt, generate_refresh_jwt, generate_session_jwt,
+            generate_session_jwt_with_extra,
+        },
         token_validator::{validate_refresh_jwt, validate_session_jwt},
     },
     state::EmulatorState,
@@ -83,6 +86,8 @@ pub async fn refresh(
 
     let claims = validate_refresh_jwt(&*state.km().await, &token_str)?;
     let user_id = claims.sub;
+    let claims_act = claims.act;
+    let claims_impersonation_claims = claims.impersonation_claims;
 
     // Check per-user logoutAll timestamp revocation
     {
@@ -103,21 +108,49 @@ pub async fn refresh(
 
         let tmpl_store = state.jwt_templates.read().await;
         let active_tmpl = tmpl_store.active();
-        let session_jwt = generate_session_jwt(
-            &*state.km().await,
-            user,
-            &state.config.project_id,
-            state.config.session_ttl,
-            active_tmpl,
-            &*state.roles.read().await,
-            "pwd",
-        )
+
+        // An impersonated refresh token carries the operator acting as this user,
+        // plus whatever custom claims impersonation started with. Both have to be
+        // put back on every session this exchange mints: the exchange rebuilds the
+        // session from the user record, so without this the actor is dropped on
+        // the first refresh and the impersonation silently ends (ENG-2366 spike).
+        let impersonating = claims_act.is_some();
+        let session_jwt = if impersonating {
+            let mut extra = claims_impersonation_claims.clone().unwrap_or_default();
+            if let Some(act) = claims_act.clone() {
+                extra.insert("act".to_string(), act);
+            }
+            generate_session_jwt_with_extra(
+                &*state.km().await,
+                user,
+                &state.config.project_id,
+                state.config.session_ttl,
+                &extra,
+                &*state.roles.read().await,
+                "impersonate",
+            )
+        } else {
+            generate_session_jwt(
+                &*state.km().await,
+                user,
+                &state.config.project_id,
+                state.config.session_ttl,
+                active_tmpl,
+                &*state.roles.read().await,
+                "pwd",
+            )
+        }
         .map_err(|e| EmulatorError::Internal(e.to_string()))?;
-        let refresh_jwt = generate_refresh_jwt(
+
+        // The re-issued refresh token keeps the actor too, so impersonation
+        // survives an arbitrary number of refreshes rather than exactly one.
+        let refresh_jwt = generate_impersonated_refresh_jwt(
             &*state.km().await,
             &user.user_id,
             &state.config.project_id,
             state.config.refresh_ttl,
+            claims_act.clone(),
+            claims_impersonation_claims.clone(),
         )
         .map_err(|e| EmulatorError::Internal(e.to_string()))?;
 

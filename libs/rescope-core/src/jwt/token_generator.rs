@@ -199,12 +199,47 @@ pub fn generate_refresh_jwt(
         exp,
         iat,
         drn: "DSR".to_string(),
+        act: None,
+        impersonation_claims: None,
     };
 
     let mut header = Header::new(Algorithm::RS256);
     header.kid = Some(km.kid.clone());
 
     encode(&header, &claims, &km.encoding_key).context("Failed to sign refresh JWT")
+}
+
+/// A refresh token that remembers it was minted by impersonation.
+///
+/// Separate from {@link generate_refresh_jwt} rather than an extra argument on it
+/// because every ordinary login path calls that one and none of them has an actor
+/// to pass; widening the common signature would put a `None` at a dozen call
+/// sites to serve one.
+pub fn generate_impersonated_refresh_jwt(
+    km: &KeyManager,
+    user_id: &str,
+    project_id: &str,
+    ttl: u64,
+    act: Option<serde_json::Value>,
+    impersonation_claims: Option<std::collections::HashMap<String, serde_json::Value>>,
+) -> Result<String> {
+    let iat = now();
+    let exp = iat + ttl;
+
+    let claims = RefreshClaims {
+        sub: user_id.to_string(),
+        iss: project_id.to_string(),
+        exp,
+        iat,
+        drn: "DSR".to_string(),
+        act,
+        impersonation_claims,
+    };
+
+    let mut header = Header::new(Algorithm::RS256);
+    header.kid = Some(km.kid.clone());
+
+    encode(&header, &claims, &km.encoding_key).context("Failed to sign impersonated refresh JWT")
 }
 
 #[cfg(test)]

@@ -5,7 +5,9 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 
 use crate::{
-    error::EmulatorError, jwt::token_validator::validate_session_jwt, state::EmulatorState,
+    error::EmulatorError,
+    jwt::token_validator::{validate_refresh_jwt, validate_session_jwt},
+    state::EmulatorState,
 };
 
 // ─── JWT Update ───────────────────────────────────────────────────────────────
@@ -139,24 +141,31 @@ pub async fn impersonate(
     let users = state.users.read().await;
     let subject = users.load(&req.login_id)?;
 
-    // Caller-supplied claims are held to Descope's published limits; `act` is
-    // ours and is added afterwards so it is never counted against them.
-    let mut extra = req.custom_claims.unwrap_or_default();
-    validate_custom_claims(&extra)?;
-    extra.insert("act".to_string(), json!({ "sub": req.impersonator_id }));
+    // Caller-supplied claims are held to Descope's published limits. They ride on
+    // the refresh token alongside the actor so the refresh exchange can put them
+    // back on each session it mints, for the same reason the actor is carried.
+    let custom = req.custom_claims.unwrap_or_default();
+    validate_custom_claims(&custom)?;
 
-    let ttl = req.refresh_duration.unwrap_or(state.config.session_ttl);
+    let ttl = req.refresh_duration.unwrap_or(state.config.refresh_ttl);
 
-    // `amr` records how the session was obtained. Descope logs impersonation
-    // under its own method rather than reusing the password method.
-    let jwt = crate::jwt::token_generator::generate_session_jwt_with_extra(
+    // A REFRESH token, not a session token. This is the one a browser can adopt:
+    // the Descope SDK takes it, posts it to `/v1/auth/refresh` and stores what
+    // comes back. Returning a session token here made the management round trip
+    // pass while the browser path silently dropped the impersonation on its
+    // first refresh (ENG-2366 spike). Real Descope documents this route as
+    // returning a refresh JWT, so this is also the faithful shape.
+    let jwt = crate::jwt::token_generator::generate_impersonated_refresh_jwt(
         &*state.km().await,
-        subject,
+        &subject.user_id,
         &state.config.project_id,
         ttl,
-        &extra,
-        &*state.roles.read().await,
-        "impersonate",
+        Some(json!({ "sub": req.impersonator_id })),
+        if custom.is_empty() {
+            None
+        } else {
+            Some(custom)
+        },
     )
     .map_err(|e| EmulatorError::Internal(e.to_string()))?;
 
@@ -189,21 +198,16 @@ pub async fn stop_impersonation(
 
     let km = state.km().await;
 
-    // Signature and expiry are checked through the typed validator first. The
-    // second decode exists only because `SessionClaims` has no `act` field, so
-    // the claim has to be read off the raw object.
-    validate_session_jwt(&km, &req.jwt)?;
-
-    let mut validation = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::RS256);
-    validation.validate_exp = false;
-    let claims = jsonwebtoken::decode::<Value>(&req.jwt, &km.decoding_key, &validation)
-        .map_err(|_| EmulatorError::InvalidToken)?
-        .claims;
+    // The caller hands back what impersonate gave them, which is a refresh
+    // token. Validated as one so an expired or forged token is refused before
+    // anything is read off it.
+    let claims = validate_refresh_jwt(&km, &req.jwt)?;
 
     // A token with no `act.sub` is not an impersonated session, so there is no
     // actor to return to.
     let actor_id = claims
-        .get("act")
+        .act
+        .as_ref()
         .and_then(|act| act.get("sub"))
         .and_then(|sub| sub.as_str())
         .ok_or(EmulatorError::InvalidToken)?;
@@ -211,21 +215,24 @@ pub async fn stop_impersonation(
     let users = state.users.read().await;
     let actor = users.load_by_user_id(actor_id)?;
 
-    let extra = req.custom_claims.unwrap_or_default();
-    validate_custom_claims(&extra)?;
+    let custom = req.custom_claims.unwrap_or_default();
+    validate_custom_claims(&custom)?;
 
-    let ttl = req.refresh_duration.unwrap_or(state.config.session_ttl);
+    let ttl = req.refresh_duration.unwrap_or(state.config.refresh_ttl);
 
-    // No `act` is added, which is what makes the returned token an ordinary
-    // session again rather than an impersonated one.
-    let jwt = crate::jwt::token_generator::generate_session_jwt_with_extra(
+    // No actor is carried, which is what makes the returned token an ordinary
+    // refresh token again. Refreshing it mints a plain session for the operator.
+    let jwt = crate::jwt::token_generator::generate_impersonated_refresh_jwt(
         &km,
-        actor,
+        &actor.user_id,
         &state.config.project_id,
         ttl,
-        &extra,
-        &*state.roles.read().await,
-        "pwd",
+        None,
+        if custom.is_empty() {
+            None
+        } else {
+            Some(custom)
+        },
     )
     .map_err(|e| EmulatorError::Internal(e.to_string()))?;
 

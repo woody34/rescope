@@ -329,7 +329,7 @@ fn add_mgmt_users(p: &mut Map<String, Value>) {
         post_op(
             "impersonate",
             "Impersonate a user",
-            "Issues a session token for `loginId` carrying the impersonator in the `act` claim, shape `{ \"act\": { \"sub\": \"<impersonatorId>\" } }`.\n\n`validateConsent` is accepted for wire compatibility and is not enforced by the emulator.",
+            "Issues a **refresh** token for `loginId` carrying the impersonator in the `act` claim, shape `{ \"act\": { \"sub\": \"<impersonatorId>\" } }`, matching Descope.\n\nHand it to the client SDK, which exchanges it at `/v1/auth/refresh`; that exchange puts `act` and any `customClaims` onto every session it mints, so the impersonation survives repeated refreshes.\n\n`validateConsent` is accepted for wire compatibility and is not enforced by the emulator.",
             t,
             "{ impersonatorId, loginId, validateConsent, customClaims, selectedTenant, refreshDuration }",
         ),
@@ -340,7 +340,7 @@ fn add_mgmt_users(p: &mut Map<String, Value>) {
         post_op(
             "stopImpersonation",
             "Stop impersonating",
-            "Exchanges an impersonated session token for one belonging to the actor named in its `act.sub` claim. The returned token carries no `act` claim.",
+            "Exchanges an impersonated refresh token for one belonging to the actor named in its `act.sub` claim. The returned token is a refresh token carrying no `act`, so refreshing it mints an ordinary session for the operator.",
             t,
             "{ jwt, customClaims, selectedTenant, refreshDuration }",
         ),

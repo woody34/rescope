@@ -471,4 +471,22 @@ pub struct RefreshClaims {
     /// Descope Resource Name — always "DSR" for refresh tokens.
     #[serde(default)]
     pub drn: String,
+
+    /// The operator acting as `sub`, when this refresh token was minted by
+    /// impersonation. Shape is Descope's: `{ "sub": "<impersonator user id>" }`.
+    ///
+    /// It lives on the REFRESH token, not only on the session token, because the
+    /// browser adopts an impersonated session by handing this token to the SDK,
+    /// which exchanges it at `/v1/auth/refresh`. That exchange rebuilds the
+    /// session from the user record, so an actor recorded only on the session
+    /// token would be dropped the first time the session refreshed and the
+    /// impersonation would silently end.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub act: Option<serde_json::Value>,
+
+    /// Custom claims supplied when impersonation started, carried so the refresh
+    /// exchange can put them back on the session token for the same reason `act`
+    /// is carried.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub impersonation_claims: Option<std::collections::HashMap<String, serde_json::Value>>,
 }

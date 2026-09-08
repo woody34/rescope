@@ -383,30 +383,32 @@ describe("management.jwt.impersonate", () => {
     expect(claims.act).toBeUndefined();
   });
 
-  it("carries customClaims alongside act rather than replacing it", async () => {
+  /**
+   * Why: custom claims supplied at impersonation belong on the SESSION the
+   *   operator ends up holding, not on the refresh token they hand to the SDK.
+   *   Asserting them on the returned token pinned the old shape, where that
+   *   token WAS the session; it now describes the wrong hop.
+   * Decision: assert them where a caller reads them, on the session minted by
+   *   the refresh exchange, alongside the actor. That also proves the two travel
+   *   together rather than one displacing the other.
+   */
+  it("carries customClaims onto the session alongside act, not replacing it", async () => {
     const sdk = createClient();
     const actor = await createUser(sdk, "cc-actor");
     const subject = await createUser(sdk, "cc-subject");
 
-    const res = await sdk.management.jwt.impersonate(
-      actor.userId,
-      subject.login,
-      false,
-      { supportCase: "ENG-2401" }
-    );
+    const imp = await sdk.management.jwt.impersonate(actor.userId, subject.login, false, {
+      supportCase: "ENG-2401",
+    });
+    expect(imp.ok).toBe(true);
 
-    expect(res.ok).toBe(true);
-    const claims = claimsOf(res.data?.jwt as string);
-    expect(claims.supportCase).toBe("ENG-2401");
-    expect(claims.act).toEqual({ sub: actor.userId });
+    const refreshed = await sdk.refresh(imp.data?.jwt as string);
+    const session = claimsOf(refreshed.data?.sessionJwt as string);
+
+    expect(session.supportCase).toBe("ENG-2401");
+    expect(session.act).toEqual({ sub: actor.userId });
   });
 
-  /**
-   * Why: ENG-2369 budgets an impersonation credential at 60 minutes and needs a
-   * way to observe expiry locally. That only works if refreshDuration reaches
-   * the issued token's lifetime, which is this emulator's deliberate divergence
-   * from Descope, where the same argument sizes a refresh token.
-   */
   it("applies refreshDuration to the issued token's lifetime", async () => {
     const sdk = createClient();
     const actor = await createUser(sdk, "ttl-actor");
@@ -424,6 +426,76 @@ describe("management.jwt.impersonate", () => {
     expect(res.ok).toBe(true);
     const claims = claimsOf(res.data?.jwt as string);
     expect(claims.exp - claims.iat).toBe(60);
+  });
+
+  /**
+   * Why: the management round trip is not how a BROWSER adopts an impersonated
+   *   session. Goliath hands the token to the Descope web SDK, which posts it to
+   *   /v1/auth/refresh and stores what comes back, so the token this route
+   *   returns has to be a REFRESH token and the actor has to survive that
+   *   exchange. The ENG-2366 spike proved neither held: the route returned a
+   *   session token (drn "DS"), and refreshing it produced a session with no
+   *   act claim at all, silently ending the impersonation on the first refresh.
+   * Decision: pin the browser path end to end rather than the management call
+   *   alone. Real Descope documents impersonate as returning a refresh JWT, so
+   *   the emulator has to match or every local test passes while production
+   *   fails.
+   */
+  it("returns a REFRESH token, which is what the browser SDK can adopt", async () => {
+    const sdk = createClient();
+    const actor = await createUser(sdk, "ref-actor");
+    const subject = await createUser(sdk, "ref-subject");
+
+    const res = await sdk.management.jwt.impersonate(actor.userId, subject.login, false);
+
+    expect(res.ok).toBe(true);
+    const claims = claimsOf(res.data?.jwt as string);
+    expect(claims.drn).toBe("DSR");
+    expect(claims.sub).toBe(subject.userId);
+    expect(claims.act).toEqual({ sub: actor.userId });
+  });
+
+  it("carries the actor through the refresh exchange onto the session token", async () => {
+    const sdk = createClient();
+    const actor = await createUser(sdk, "rt2-actor");
+    const subject = await createUser(sdk, "rt2-subject");
+
+    const imp = await sdk.management.jwt.impersonate(actor.userId, subject.login, false);
+    const refreshed = await sdk.refresh(imp.data?.jwt as string);
+
+    expect(refreshed.ok).toBe(true);
+    const session = claimsOf(refreshed.data?.sessionJwt as string);
+    expect(session.sub).toBe(subject.userId);
+    expect(session.act).toEqual({ sub: actor.userId });
+  });
+
+  it("keeps the actor across a SECOND refresh, so the session does not silently end", async () => {
+    const sdk = createClient();
+    const actor = await createUser(sdk, "rt3-actor");
+    const subject = await createUser(sdk, "rt3-subject");
+
+    const imp = await sdk.management.jwt.impersonate(actor.userId, subject.login, false);
+    const first = await sdk.refresh(imp.data?.jwt as string);
+    const second = await sdk.refresh(first.data?.refreshJwt as string);
+
+    expect(second.ok).toBe(true);
+    const session = claimsOf(second.data?.sessionJwt as string);
+    expect(session.act).toEqual({ sub: actor.userId });
+  });
+
+  it("drops the actor once impersonation stops, so a later refresh is an ordinary session", async () => {
+    const sdk = createClient();
+    const actor = await createUser(sdk, "rt4-actor");
+    const subject = await createUser(sdk, "rt4-subject");
+
+    const imp = await sdk.management.jwt.impersonate(actor.userId, subject.login, false);
+    const stopped = await sdk.management.jwt.stopImpersonation(imp.data?.jwt as string);
+    const refreshed = await sdk.refresh(stopped.data?.jwt as string);
+
+    expect(refreshed.ok).toBe(true);
+    const session = claimsOf(refreshed.data?.sessionJwt as string);
+    expect(session.sub).toBe(actor.userId);
+    expect(session.act).toBeUndefined();
   });
 
   it("refuses a login id no user holds", async () => {

@@ -399,13 +399,21 @@ Rescope implements the Descope HTTP surface — auth, session, and management en
 
 | Method | Path | Description |
 | ------ | ------------------------------ | ---------------------------------- |
-| `POST` | `/v1/mgmt/impersonate` | Issue a session token for another user |
-| `POST` | `/v1/mgmt/stop/impersonation` | Return a session token to the actor |
+| `POST` | `/v1/mgmt/impersonate` | Issue a refresh token for another user |
+| `POST` | `/v1/mgmt/stop/impersonation` | Return a refresh token to the actor |
+
+Both return a **refresh** token, matching Descope. That is the token a browser
+can adopt: hand it to the client SDK, which exchanges it at `/v1/auth/refresh`.
 
 The impersonated token carries the actor in Descope's `act` claim, shape
 `{"act": {"sub": "<impersonatorId>"}}`. Its presence is what marks a session as
 impersonated; the token returned by stop carries no `act` claim, which is how a
 client detects the return leg.
+
+The refresh exchange puts `act`, and any `customClaims` impersonation started
+with, onto every session token it mints, and keeps them on the refresh token it
+re-issues. Without that the actor would be dropped the first time the session
+refreshed and the impersonation would silently end.
 
 Three request fields are accepted for wire compatibility and are not enforced:
 `validateConsent` (no consent store exists), `selectedTenant` (the subject's
