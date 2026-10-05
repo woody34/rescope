@@ -30,6 +30,12 @@ async fn main() -> anyhow::Result<()> {
     if let Some(ref seed_path) = config.seed_file {
         info!(seed_file = %seed_path, "Config");
     }
+    if let Some(ref theme_path) = config.theme_file {
+        info!(theme_file = %theme_path, "Config");
+        if !std::path::Path::new(theme_path).exists() {
+            tracing::warn!(path = %theme_path, "Theme file not found — flows render unstyled");
+        }
+    }
     info!("⚠️  Do not use in production");
 
     let state = EmulatorState::new(&config).await?;

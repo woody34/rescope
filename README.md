@@ -73,6 +73,7 @@ Other workspace commands: `npm run build` (API + UI), `npm run lint` (Clippy + E
 | `DESCOPE_EMULATOR_SESSION_TTL` | `3600` | Session JWT TTL (seconds) |
 | `DESCOPE_EMULATOR_REFRESH_TTL` | `2592000` | Refresh JWT TTL (seconds) |
 | `DESCOPE_EMULATOR_SEED_FILE` | _(none)_ | Path to a JSON seed file |
+| `DESCOPE_EMULATOR_THEME_FILE` | _(none)_ | Compiled flow theme served to `descope-wc` as `theme.json` (download it from `https://static.descope.com/pages/<projectId>/v2-beta/theme.json`; a console style export is refused). Read on every request |
 | `DESCOPE_EMULATOR_KEY_FILE` | _(none)_ | Path to a PKCS8 PEM private key (auto-generated if absent) |
 | `DESCOPE_EMULATOR_CONNECTOR_MODE` | `log` | `log` (default) or `invoke` (real outbound HTTP) |
 | `RESCOPE_LOG_BODY` | `1` | Set `0` to disable request/response body logging |
