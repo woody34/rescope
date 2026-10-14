@@ -288,9 +288,16 @@ mod tests {
     #[test]
     fn session_jwt_omits_unset_custom_attribute_claims() {
         let km = test_km();
-        let jwt =
-            generate_session_jwt(&km, &test_user(), "proj", 3600, None, &empty_roles(), "saml")
-                .unwrap();
+        let jwt = generate_session_jwt(
+            &km,
+            &test_user(),
+            "proj",
+            3600,
+            None,
+            &empty_roles(),
+            "saml",
+        )
+        .unwrap();
 
         let payload = payload_of(&jwt);
         let obj = payload.as_object().unwrap();
@@ -321,8 +328,8 @@ mod tests {
         user.custom_attributes
             .insert("company".into(), serde_json::Value::String("rfx".into()));
 
-        let jwt = generate_session_jwt(&km, &user, "proj", 3600, None, &empty_roles(), "saml")
-            .unwrap();
+        let jwt =
+            generate_session_jwt(&km, &user, "proj", 3600, None, &empty_roles(), "saml").unwrap();
 
         let payload = payload_of(&jwt);
         assert_eq!(

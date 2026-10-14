@@ -4,3 +4,4 @@ pub mod otp;
 pub mod password;
 pub mod saml;
 pub mod session;
+pub mod webauthn;

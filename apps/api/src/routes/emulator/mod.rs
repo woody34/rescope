@@ -48,6 +48,54 @@ pub async fn get_otp(
     Ok(Json(json!({ "code": code })))
 }
 
+/// GET /emulator/flow/link/:loginId
+/// The last sign-in link a flow sent to the login id: `{ token, link, executionId }`.
+/// Opening `link` in the browser resumes the flow, as clicking it in an email would.
+pub async fn get_flow_link(
+    State(state): State<EmulatorState>,
+    Path(login_id): Path<String>,
+) -> Result<Json<Value>, EmulatorError> {
+    let flows = state.flows.read().await;
+    let sent = flows
+        .sent_link(&login_id)
+        .ok_or(EmulatorError::InvalidToken)?;
+    Ok(Json(serde_json::to_value(sent).unwrap_or_default()))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RiskScoreRequest {
+    /// Omit to set the score every sign-in gets.
+    pub login_id: Option<String>,
+    pub score: f64,
+}
+
+/// POST /emulator/risk
+/// Sets the score a flow's risk step reports (0 to 1), for one login id or for all.
+pub async fn set_risk_score(
+    State(state): State<EmulatorState>,
+    PermissiveJson(req): PermissiveJson<RiskScoreRequest>,
+) -> Result<Json<Value>, EmulatorError> {
+    if !(0.0..=1.0).contains(&req.score) {
+        return Err(EmulatorError::ValidationError(
+            "score must be between 0 and 1".into(),
+        ));
+    }
+    state
+        .flows
+        .write()
+        .await
+        .set_risk_score(req.login_id.as_deref(), req.score);
+    Ok(Json(json!({ "ok": true })))
+}
+
+/// DELETE /emulator/risk
+/// Every sign-in scores 0 again. `/emulator/reset` keeps scores (see `FlowStore::reset`).
+pub async fn clear_risk_scores(State(state): State<EmulatorState>) -> Json<Value> {
+    state.flows.write().await.clear_risk_scores();
+    Json(json!({ "ok": true }))
+}
+
 /// POST /emulator/seed/users
 /// Batch-creates users without requiring management auth.
 /// Body: { "users": [{ "loginId": "...", "email": "...", "name": "...", "password": "..." }, ...] }

@@ -4,6 +4,7 @@ pub mod cookies;
 #[cfg(not(feature = "dev-ui"))]
 pub mod embedded_ui;
 pub mod extractor;
+pub mod flow_engine;
 pub mod mgmt_auth;
 pub mod openapi;
 pub mod request_log;

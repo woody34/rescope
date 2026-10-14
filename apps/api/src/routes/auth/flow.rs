@@ -157,6 +157,10 @@ pub async fn start(
 ) -> Result<(HeaderMap, Json<Value>), EmulatorError> {
     let body = parse_body(&body);
     let flow_id = field(&body, "flowId").unwrap_or_default();
+    if let Some(def) = state.flow_library.get(&flow_id) {
+        let (headers, env) = crate::flow_engine::start(&state, def, &body).await;
+        return Ok((headers, Json(env)));
+    }
     if flow_id != FLOW_ID {
         return Ok((
             HeaderMap::new(),
@@ -221,6 +225,18 @@ pub async fn next(
     let body = parse_body(&body);
     let execution_id = field(&body, "executionId").unwrap_or_default();
     let input = body.get("input").cloned().unwrap_or_else(|| json!({}));
+
+    // An execution of an exported flow runs in the flow engine.
+    let exported = state
+        .flows
+        .read()
+        .await
+        .run(&execution_id)
+        .map(|run| run.flow_id.clone());
+    if let Some(def) = exported.and_then(|id| state.flow_library.get(&id)) {
+        let (headers, env) = crate::flow_engine::next(&state, def, &body).await;
+        return Ok((headers, Json(env)));
+    }
 
     // Load the current step for this execution.
     let step = {

@@ -1,0 +1,57 @@
+---
+title: Flows and Passkeys
+description: Run a flow exported from the Descope console, with passkeys, codes, links and a risk score you control.
+---
+
+Rescope runs flows you export from the Descope console, so `descope-wc` shows the same screens and takes the same branches locally as it does against Descope.
+
+## Load a flow
+
+1. In the Descope console, open the flow and select **Export**. Save the file as `<flowId>.json` in one directory.
+2. Save each screen Descope serves for it as `screens/<flowId>/<screenId>.html` in the same directory. Descope serves them at `https://static.descope.com/pages/<projectId>/v2-beta/<flowId>/<screenId>.html`.
+3. Start Rescope with `DESCOPE_EMULATOR_FLOWS_DIR` set to the directory.
+
+Rescope lists each flow in `config.json` with its first screen, and serves the screens. JSON files that are not flow exports, such as a theme, are skipped.
+
+## What runs
+
+| Step | Rescope |
+| --- | --- |
+| Screens | Shown with `form`, `sentTo` and the screen's context keys in its state. A refused step shows the screen again with `errorText`. |
+| Conditions | `is-true`, `is-false`, `equal`, `not-equal`, `contains`, `greater-than(-or-equal)`, `less-than(-or-equal)`, `empty`, `not-empty`, `is-email`, `is-not-email` over the flow context: `form.*`, `user.*`, `unauthUser.*` (the user the typed identifier names, including `webauthn`, `tenantIds` and `customAttributes`), `authInfo.*`, `deviceInfo.webAuthnSupport`, `riskInfo.riskScore` and `ssoEnabled`. |
+| Password | `password-sign-in-v2`, `password-replace-v3`, `password-update` |
+| Codes | `sign-in-otp-email`, `sign-up-or-in-otp-email`, `sign-in-otp-sms`, `verify-code-otp-email`, `verify-code-otp-sms`. Read the code with `GET /emulator/otp/:loginId`. |
+| Links | `sign-in-magic-linkv3-email`, `update-user-magic-link-email`, `verify-magic-link`. The waiting screen polls; the link resumes the run. Read it with `GET /emulator/flow/link/:loginId`. |
+| Passkeys | `webauthn-sign-up-*`, `webauthn-sign-in-*`, `webauthn-update-user-*` (start and finish) |
+| SSO | `saml-start`, `exchange-saml-code` |
+| Risk | `risk` reports the score you set with `POST /emulator/risk` (`{ "loginId": "...", "score": 0.9 }`; omit `loginId` for every sign-in). `DELETE /emulator/risk` sets it back to 0. |
+| User properties | `update-user-properties` (custom attributes and the display name) |
+
+Any other action fails the run with an error that names it. Scriptlets do not run: there is no JavaScript engine, so they leave the form as it is.
+
+## Passkeys
+
+`descope-wc` asks the browser for a passkey and sends the result to Rescope, which checks the challenge, the relying party (the page's host), user presence and, on sign-in, the signature (ES256 or RS256). Attestation statements are not checked.
+
+In Playwright, give the page a passkey device with Chrome's virtual authenticator:
+
+```ts
+const cdp = await page.context().newCDPSession(page);
+await cdp.send('WebAuthn.enable', { enableUI: false });
+await cdp.send('WebAuthn.addVirtualAuthenticator', {
+  options: {
+    protocol: 'ctap2',
+    transport: 'internal',
+    hasResidentKey: true,
+    hasUserVerification: true,
+    isUserVerified: true,
+    automaticPresenceSimulation: true,
+  },
+});
+```
+
+The same ceremonies are available without a flow at `/v1/auth/webauthn/{signup,signin,update}/{start,finish}`.
+
+## Resets
+
+`/emulator/reset` keeps runs of exported flows, sent links and risk scores, as it keeps magic-link tokens: test shards share one emulator, and one shard's reset must not end a sign-in another shard is part way through. Runs expire after 10 minutes. Passkeys are cleared with the users they belong to.

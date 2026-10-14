@@ -43,6 +43,15 @@ pub fn build_router(state: EmulatorState) -> Router {
             get(crate::routes::emulator::get_otp),
         )
         .route(
+            "/emulator/flow/link/:login_id",
+            get(crate::routes::emulator::get_flow_link),
+        )
+        .route(
+            "/emulator/risk",
+            post(crate::routes::emulator::set_risk_score)
+                .delete(crate::routes::emulator::clear_risk_scores),
+        )
+        .route(
             "/emulator/tenant",
             post(crate::routes::emulator::create_tenant),
         )
@@ -85,6 +94,31 @@ pub fn build_router(state: EmulatorState) -> Router {
             get(crate::routes::auth::password::policy),
         )
         // ── Flow runtime (descope-wc) ─────────────────────────────────
+        // ── WebAuthn (passkeys) ───────────────────────────────────────
+        .route(
+            "/v1/auth/webauthn/signup/start",
+            post(crate::routes::auth::webauthn::signup_start),
+        )
+        .route(
+            "/v1/auth/webauthn/signup/finish",
+            post(crate::routes::auth::webauthn::signup_finish),
+        )
+        .route(
+            "/v1/auth/webauthn/signin/start",
+            post(crate::routes::auth::webauthn::signin_start),
+        )
+        .route(
+            "/v1/auth/webauthn/signin/finish",
+            post(crate::routes::auth::webauthn::signin_finish),
+        )
+        .route(
+            "/v1/auth/webauthn/update/start",
+            post(crate::routes::auth::webauthn::update_start),
+        )
+        .route(
+            "/v1/auth/webauthn/update/finish",
+            post(crate::routes::auth::webauthn::update_finish),
+        )
         .route("/v1/flow/start", post(crate::routes::auth::flow::start))
         .route("/v2/flow/start", post(crate::routes::auth::flow::start))
         .route("/v1/flow/next", post(crate::routes::auth::flow::next))

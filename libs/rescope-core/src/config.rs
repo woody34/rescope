@@ -9,6 +9,8 @@ pub struct EmulatorConfig {
     pub key_file: Option<String>,
     /// Compiled flow theme served to `descope-wc` as `theme.json`.
     pub theme_file: Option<String>,
+    /// Directory of Descope flow exports (and their screens) the emulator runs.
+    pub flows_dir: Option<String>,
     pub session_ttl: u64,
     pub refresh_ttl: u64,
     /// Controls whether connectors actually fire HTTP requests.
@@ -30,6 +32,7 @@ impl EmulatorConfig {
             seed_file: env::var("DESCOPE_EMULATOR_SEED_FILE").ok(),
             key_file: env::var("DESCOPE_EMULATOR_KEY_FILE").ok(),
             theme_file: env::var("DESCOPE_EMULATOR_THEME_FILE").ok(),
+            flows_dir: env::var("DESCOPE_EMULATOR_FLOWS_DIR").ok(),
             session_ttl: env::var("DESCOPE_EMULATOR_SESSION_TTL")
                 .ok()
                 .and_then(|v| v.parse().ok())
@@ -52,6 +55,7 @@ impl Default for EmulatorConfig {
             seed_file: None,
             key_file: None,
             theme_file: None,
+            flows_dir: None,
             session_ttl: 3600,
             refresh_ttl: 2_592_000,
             connector_mode: None,

@@ -26,7 +26,8 @@ const SIGN_IN_PASSWORD_HTML: &str = include_str!("../../assets/flow/signInPasswo
 /// Matching ignores the projectId/version path segments and keys off the file
 /// name only:
 ///
-/// * `.../config.json`          → config.json (application/json)
+/// * `.../config.json`          → config.json, with the exported flows (application/json)
+/// * `.../<flowId>/<screen>.html` → a screen of a flow loaded from `DESCOPE_EMULATOR_FLOWS_DIR`
 /// * `.../signInPassword.html`  → password screen (text/html)
 /// * `.../signIn.html`          → sign-in screen: email or username (text/html)
 /// * `.../theme.json`           → the configured theme file, 404 when none is set
@@ -38,12 +39,16 @@ pub async fn serve(State(state): State<EmulatorState>, uri: Uri) -> Response<Bod
     if path.ends_with("theme.json") {
         return serve_theme(state.config.theme_file.as_deref());
     }
+    if path.ends_with("config.json") {
+        return ok("application/json", config_json(&state).to_string());
+    }
+    if let Some(html) = exported_screen(&state, path) {
+        return ok("text/html; charset=utf-8", html);
+    }
 
     // Order matters: signInPassword.html also ends with "Password.html", but
     // signIn.html would NOT match it — still, check the more specific one first.
-    let (body, content_type) = if path.ends_with("config.json") {
-        (CONFIG_JSON, "application/json")
-    } else if path.ends_with("signInPassword.html") {
+    let (body, content_type) = if path.ends_with("signInPassword.html") {
         (SIGN_IN_PASSWORD_HTML, "text/html; charset=utf-8")
     } else if path.ends_with("signIn.html") {
         (SIGN_IN_HTML, "text/html; charset=utf-8")
@@ -60,6 +65,40 @@ pub async fn serve(State(state): State<EmulatorState>, uri: Uri) -> Response<Bod
         .header(header::CACHE_CONTROL, "no-cache")
         .body(Body::from(body))
         .unwrap()
+}
+
+fn ok(content_type: &str, body: String) -> Response<Body> {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, content_type)
+        .header(header::CACHE_CONTROL, "no-cache")
+        .body(Body::from(body))
+        .unwrap()
+}
+
+/// The built-in config, plus an entry for every exported flow. The exported
+/// flows' screens are drawn with the components version they were built with.
+fn config_json(state: &EmulatorState) -> serde_json::Value {
+    let mut config: serde_json::Value =
+        serde_json::from_str(CONFIG_JSON).expect("the embedded config.json is valid JSON");
+    for flow in state.flow_library.flows() {
+        config["flows"][&flow.id] = flow.config_entry();
+        if let Some(version) = &flow.components_version {
+            config["componentsVersion"] = serde_json::json!(version);
+        }
+    }
+    config
+}
+
+/// `.../<flowId>/<screenId>.html` for a flow loaded from `DESCOPE_EMULATOR_FLOWS_DIR`.
+fn exported_screen(state: &EmulatorState, path: &str) -> Option<String> {
+    let mut parts = path.trim_end_matches(".html").rsplit('/');
+    let screen_id = parts.next()?;
+    let flow_id = parts.next()?;
+    if !path.ends_with(".html") {
+        return None;
+    }
+    state.flow_library.screen_html(flow_id, screen_id)
 }
 
 /// Serve the theme file verbatim. A console style export (`{"theme": {"styles":

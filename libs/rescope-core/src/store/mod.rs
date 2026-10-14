@@ -12,3 +12,4 @@ pub mod role_store;
 pub mod tenant_store;
 pub mod token_store;
 pub mod user_store;
+pub mod webauthn_store;

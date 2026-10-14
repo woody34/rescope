@@ -22,7 +22,7 @@ fn now() -> u64 {
         .as_secs()
 }
 
-fn masked_email(email: &str) -> String {
+pub(crate) fn masked_email(email: &str) -> String {
     if let Some((user, domain)) = email.split_once('@') {
         let masked = if user.len() <= 2 {
             "*".repeat(user.len())
@@ -35,7 +35,7 @@ fn masked_email(email: &str) -> String {
     }
 }
 
-fn masked_phone(phone: &str) -> String {
+pub(crate) fn masked_phone(phone: &str) -> String {
     if phone.len() > 4 {
         format!("***{}", &phone[phone.len() - 4..])
     } else {
