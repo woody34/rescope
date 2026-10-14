@@ -39,6 +39,7 @@ export default defineConfig({
 						{ label: 'OTP Authentication', slug: 'guides/otp-authentication' },
 						{ label: 'Magic Links', slug: 'guides/magic-links' },
 						{ label: 'Password Auth', slug: 'guides/password-auth' },
+						{ label: 'Flows and Passkeys', slug: 'guides/flows-and-passkeys' },
 						{ label: 'User Management', slug: 'guides/user-management' },
 					],
 				},
