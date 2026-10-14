@@ -66,6 +66,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
+rescope-core = { path = "../../libs/rescope-core", features = ["axum", "native-crypto", "test-support"] }
 tokio = { version = "1", features = ["full"] }
 axum-test = "15"
 serde_json = "1"

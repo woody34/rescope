@@ -73,7 +73,7 @@ pub async fn start_get(
     start_impl(state, req).await
 }
 
-async fn start_impl(
+pub(crate) async fn start_impl(
     state: EmulatorState,
     req: SamlStartRequest,
 ) -> Result<Json<Value>, EmulatorError> {
@@ -108,9 +108,7 @@ async fn start_impl(
                 format!("tenant:{}", tenant.id),
                 TokenType::Saml,
             );
-            return Ok(Json(
-                json!({ "url": format!("{redirect_url}?code={code}") }),
-            ));
+            return Ok(Json(json!({ "url": with_code(&redirect_url, &code) })));
         }
         let params = ResumeParams {
             email: None,
@@ -162,9 +160,14 @@ async fn start_impl(
         .await
         .insert(code.clone(), user_id, TokenType::Saml);
 
-    Ok(Json(
-        json!({ "url": format!("{redirect_url}?code={code}") }),
-    ))
+    Ok(Json(json!({ "url": with_code(&redirect_url, &code) })))
+}
+
+/// The redirect URL with the exchange code added, keeping any query it already has
+/// (a flow's return URL carries the execution it resumes).
+fn with_code(redirect_url: &str, code: &str) -> String {
+    let separator = if redirect_url.contains('?') { '&' } else { '?' };
+    format!("{redirect_url}{separator}code={code}")
 }
 
 // ─── SAML Exchange ────────────────────────────────────────────────────────────

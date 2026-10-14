@@ -1,6 +1,7 @@
 use crate::{
     config::EmulatorConfig,
     connector::invoker::{ConnectorInvoker, ConnectorMode},
+    flow_engine::FlowLibrary,
     jwt::key_manager::KeyManager,
     routes::emulator::idp_oidc::OidcCodeStore,
     store::{
@@ -9,7 +10,7 @@ use crate::{
         flow_store::FlowStore, idp_store::IdpStore, jwt_template_store::JwtTemplateStore,
         otp_store::OtpStore, permission_store::PermissionStore, revocation_store::RevocationStore,
         role_store::RoleStore, tenant_store::TenantStore, token_store::TokenStore,
-        user_store::UserStore,
+        user_store::UserStore, webauthn_store::WebAuthnStore,
     },
 };
 use anyhow::Result;
@@ -29,6 +30,10 @@ pub struct EmulatorState {
     pub otps: Arc<RwLock<OtpStore>>,
     /// In-flight Descope flow executions (sign-up-or-in-passwords runtime).
     pub flows: Arc<RwLock<FlowStore>>,
+    /// Passkeys and open WebAuthn ceremonies.
+    pub webauthn: Arc<RwLock<WebAuthnStore>>,
+    /// Flow exports loaded from `DESCOPE_EMULATOR_FLOWS_DIR`.
+    pub flow_library: Arc<FlowLibrary>,
     /// Per-user revocation timestamp (userId → epoch secs).
     pub user_revocations: Arc<RwLock<HashMap<String, u64>>>,
     /// Per-login-id lockout state for OTP, password, etc.
@@ -72,6 +77,8 @@ impl EmulatorState {
             revoked: Arc::new(RwLock::new(RevocationStore::new())),
             otps: Arc::new(RwLock::new(OtpStore::new())),
             flows: Arc::new(RwLock::new(FlowStore::new())),
+            webauthn: Arc::new(RwLock::new(WebAuthnStore::new())),
+            flow_library: Arc::new(FlowLibrary::load(config.flows_dir.as_deref())?),
             user_revocations: Arc::new(RwLock::new(HashMap::new())),
             lockouts: Arc::new(RwLock::new(HashMap::new())),
             // Config stores
@@ -135,6 +142,7 @@ impl EmulatorState {
         self.revoked.write().await.reset();
         self.otps.write().await.reset();
         self.flows.write().await.reset();
+        self.webauthn.write().await.reset();
         self.user_revocations.write().await.clear();
         self.lockouts.write().await.clear();
         self.auth_method_config.write().await.reset();

@@ -124,6 +124,8 @@ mod tests {
             exp: 1,
             iat: 1,
             drn: "DSR".into(),
+            act: None,
+            impersonation_claims: None,
         };
         let jwt = jsonwebtoken::encode(&header, &claims, &km.encoding_key).unwrap();
         let err = validate_refresh_jwt(&km, &jwt).unwrap_err();

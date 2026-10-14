@@ -14,6 +14,8 @@ default = ["native-crypto"]
 native-crypto = ["dep:jsonwebtoken", "dep:rcgen", "dep:flate2"]
 # axum: enables IntoResponse impl for EmulatorError
 axum = ["dep:axum"]
+# test-support: a software WebAuthn authenticator for tests in dependent crates
+test-support = []
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -29,7 +31,11 @@ bcrypt = "0.15"
 tracing = "0.1"
 
 # RSA key generation (pure Rust — WASM compatible)
-rsa = { version = "0.9", features = ["pem"] }
+rsa = { version = "0.9", features = ["pem", "sha2"] }
+
+# WebAuthn: CBOR attestation objects and ES256 passkey signatures (pure Rust, WASM compatible)
+ciborium = "0.2"
+p256 = { version = "0.13", features = ["ecdsa"] }
 
 # JWT signing/validation (depends on ring — NOT WASM compatible)
 jsonwebtoken = { version = "9", features = ["use_pem"], optional = true }

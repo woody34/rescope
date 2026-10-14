@@ -1,0 +1,811 @@
+{
+  "flowId": "sign-in-anyway",
+  "metadata": {
+    "name": "Sign in anyway",
+    "componentsVersion": "3.20.4"
+  },
+  "contents": {
+    "startTask": "start",
+    "tasks": {
+      "start": {
+        "id": "start",
+        "name": "start",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "",
+              "taskId": "0"
+            }
+          ]
+        }
+      },
+      "0": {
+        "id": "0",
+        "type": "screen",
+        "name": "Welcome",
+        "screenId": "SCwelcome",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "continue",
+              "taskId": "74"
+            }
+          ]
+        }
+      },
+      "74": {
+        "id": "74",
+        "type": "condition",
+        "name": "Identifier is an email?",
+        "conditions": [
+          {
+            "interactionId": "yes74",
+            "name": "Identifier is an email?",
+            "atomicConditions": [
+              {
+                "operator": "is-email",
+                "target": {
+                  "type": "context",
+                  "value": "form.email"
+                },
+                "predicate": {
+                  "type": "inline",
+                  "value": ""
+                }
+              }
+            ]
+          },
+          {
+            "interactionId": "ELSE",
+            "name": "Else"
+          }
+        ],
+        "next": {
+          "rules": [
+            {
+              "interactionId": "yes74",
+              "taskId": "99"
+            },
+            {
+              "interactionId": "ELSE",
+              "taskId": "42"
+            }
+          ]
+        }
+      },
+      "99": {
+        "id": "99",
+        "type": "condition",
+        "name": "Last signed in with a password?",
+        "conditions": [
+          {
+            "interactionId": "yes99",
+            "name": "Last signed in with a password?",
+            "atomicConditions": [
+              {
+                "operator": "equal",
+                "target": {
+                  "type": "context",
+                  "value": "unauthUser.customAttributes.lastSignInMethod"
+                },
+                "predicate": {
+                  "type": "inline",
+                  "value": "password"
+                }
+              }
+            ]
+          },
+          {
+            "interactionId": "ELSE",
+            "name": "Else"
+          }
+        ],
+        "next": {
+          "rules": [
+            {
+              "interactionId": "yes99",
+              "taskId": "42"
+            },
+            {
+              "interactionId": "ELSE",
+              "taskId": "80"
+            }
+          ]
+        }
+      },
+      "80": {
+        "id": "80",
+        "type": "condition",
+        "name": "Has a passkey?",
+        "conditions": [
+          {
+            "interactionId": "yes80",
+            "name": "Has a passkey?",
+            "atomicConditions": [
+              {
+                "operator": "is-true",
+                "target": {
+                  "type": "context",
+                  "value": "unauthUser.webauthn"
+                },
+                "predicate": {
+                  "type": "inline",
+                  "value": ""
+                }
+              }
+            ]
+          },
+          {
+            "interactionId": "ELSE",
+            "name": "Else"
+          }
+        ],
+        "next": {
+          "rules": [
+            {
+              "interactionId": "yes80",
+              "taskId": "81"
+            },
+            {
+              "interactionId": "ELSE",
+              "taskId": "57"
+            }
+          ]
+        }
+      },
+      "81": {
+        "id": "81",
+        "type": "condition",
+        "name": "Has no tenant?",
+        "conditions": [
+          {
+            "interactionId": "yes81",
+            "name": "Has no tenant?",
+            "atomicConditions": [
+              {
+                "operator": "empty",
+                "target": {
+                  "type": "context",
+                  "value": "unauthUser.tenantIds"
+                },
+                "predicate": {
+                  "type": "inline",
+                  "value": ""
+                }
+              }
+            ]
+          },
+          {
+            "interactionId": "ELSE",
+            "name": "Else"
+          }
+        ],
+        "next": {
+          "rules": [
+            {
+              "interactionId": "yes81",
+              "taskId": "82"
+            },
+            {
+              "interactionId": "ELSE",
+              "taskId": "57"
+            }
+          ]
+        }
+      },
+      "57": {
+        "id": "57",
+        "type": "screen",
+        "name": "Choose a method",
+        "screenId": "SCchooser",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "send-code",
+              "taskId": "54"
+            },
+            {
+              "interactionId": "send-link",
+              "taskId": "24"
+            },
+            {
+              "interactionId": "use-password",
+              "taskId": "42"
+            }
+          ]
+        },
+        "contextKeys": [
+          "form.email"
+        ]
+      },
+      "82": {
+        "id": "82",
+        "type": "screen",
+        "name": "Choose a method (passkey)",
+        "screenId": "SCchooserPasskey",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "bio-signin",
+              "taskId": "30"
+            },
+            {
+              "interactionId": "send-code",
+              "taskId": "54"
+            },
+            {
+              "interactionId": "send-link",
+              "taskId": "24"
+            },
+            {
+              "interactionId": "use-password",
+              "taskId": "42"
+            }
+          ]
+        },
+        "contextKeys": [
+          "form.email"
+        ]
+      },
+      "42": {
+        "id": "42",
+        "type": "screen",
+        "name": "Password",
+        "screenId": "SCpassword",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "pwSignInSubmit",
+              "taskId": "38"
+            },
+            {
+              "interactionId": "pwUseMagicLink",
+              "taskId": "80"
+            }
+          ]
+        },
+        "contextKeys": [
+          "form.email"
+        ]
+      },
+      "38": {
+        "id": "38",
+        "type": "automated",
+        "name": "Sign in with password",
+        "action": "password-sign-in-v2",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "success",
+              "taskId": "95"
+            }
+          ]
+        }
+      },
+      "95": {
+        "id": "95",
+        "type": "automated",
+        "name": "Remember sign-in method (password)",
+        "action": "update-user-properties",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "success",
+              "taskId": "11"
+            }
+          ]
+        },
+        "arguments": {
+          "userPropertiesDefinitions": {
+            "type": "inline",
+            "value": [
+              {
+                "key": "customAttributes.lastSignInMethod",
+                "type": "string",
+                "value": "password"
+              }
+            ]
+          }
+        }
+      },
+      "11": {
+        "id": "11",
+        "type": "automated",
+        "name": "Risk",
+        "action": "risk",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "success",
+              "taskId": "15"
+            }
+          ]
+        }
+      },
+      "15": {
+        "id": "15",
+        "type": "condition",
+        "name": "Is risk high?",
+        "conditions": [
+          {
+            "interactionId": "yes15",
+            "name": "Is risk high?",
+            "atomicConditions": [
+              {
+                "operator": "greater-than",
+                "target": {
+                  "type": "context",
+                  "value": "riskInfo.riskScore"
+                },
+                "predicate": {
+                  "type": "inline",
+                  "value": 0.5
+                }
+              }
+            ]
+          },
+          {
+            "interactionId": "ELSE",
+            "name": "Else"
+          }
+        ],
+        "next": {
+          "rules": [
+            {
+              "interactionId": "yes15",
+              "taskId": "43"
+            },
+            {
+              "interactionId": "ELSE",
+              "taskId": "22"
+            }
+          ]
+        }
+      },
+      "43": {
+        "id": "43",
+        "type": "automated",
+        "name": "2FA code",
+        "action": "sign-in-otp-email",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "success",
+              "taskId": "44"
+            }
+          ]
+        }
+      },
+      "44": {
+        "id": "44",
+        "type": "screen",
+        "name": "Verify 2FA code",
+        "screenId": "SCsecondFactor",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "submit-code",
+              "taskId": "45"
+            }
+          ]
+        },
+        "contextKeys": [
+          "sentTo.maskedEmail"
+        ]
+      },
+      "45": {
+        "id": "45",
+        "type": "automated",
+        "name": "Verify 2FA code",
+        "action": "verify-code-otp-email",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "success",
+              "taskId": "22"
+            }
+          ]
+        }
+      },
+      "22": {
+        "id": "22",
+        "type": "condition",
+        "name": "Supports WebAuthn?",
+        "conditions": [
+          {
+            "interactionId": "yes22",
+            "name": "Supports WebAuthn?",
+            "atomicConditions": [
+              {
+                "operator": "is-true",
+                "target": {
+                  "type": "context",
+                  "value": "deviceInfo.webAuthnSupport"
+                },
+                "predicate": {
+                  "type": "inline",
+                  "value": ""
+                }
+              }
+            ]
+          },
+          {
+            "interactionId": "ELSE",
+            "name": "Else"
+          }
+        ],
+        "next": {
+          "rules": [
+            {
+              "interactionId": "yes22",
+              "taskId": "79"
+            },
+            {
+              "interactionId": "ELSE",
+              "taskId": "6"
+            }
+          ]
+        }
+      },
+      "79": {
+        "id": "79",
+        "type": "condition",
+        "name": "User has no tenant?",
+        "conditions": [
+          {
+            "interactionId": "yes79",
+            "name": "User has no tenant?",
+            "atomicConditions": [
+              {
+                "operator": "empty",
+                "target": {
+                  "type": "context",
+                  "value": "user.tenantIds"
+                },
+                "predicate": {
+                  "type": "inline",
+                  "value": ""
+                }
+              }
+            ]
+          },
+          {
+            "interactionId": "ELSE",
+            "name": "Else"
+          }
+        ],
+        "next": {
+          "rules": [
+            {
+              "interactionId": "yes79",
+              "taskId": "21"
+            },
+            {
+              "interactionId": "ELSE",
+              "taskId": "6"
+            }
+          ]
+        }
+      },
+      "21": {
+        "id": "21",
+        "type": "screen",
+        "name": "Promote biometrics",
+        "screenId": "SCpromote",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "add",
+              "taskId": "23"
+            },
+            {
+              "interactionId": "not-now",
+              "taskId": "6"
+            }
+          ]
+        }
+      },
+      "23": {
+        "id": "23",
+        "type": "automated",
+        "name": "Add a passkey",
+        "action": "webauthn-update-user-start",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "success",
+              "taskId": "23.end"
+            }
+          ]
+        },
+        "arguments": {
+          "finishStepId": {
+            "type": "inline",
+            "value": "23.end"
+          },
+          "passkeyLoginId": {
+            "type": "inline",
+            "value": "{{user.email}}"
+          }
+        }
+      },
+      "23.end": {
+        "id": "23.end",
+        "type": "automated",
+        "name": "Add a passkey",
+        "action": "webauthn-update-user-finish",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "success",
+              "taskId": "6"
+            }
+          ]
+        },
+        "arguments": {
+          "finishStepId": {
+            "type": "inline",
+            "value": "23.end"
+          }
+        }
+      },
+      "54": {
+        "id": "54",
+        "type": "automated",
+        "name": "Email a code",
+        "action": "sign-up-or-in-otp-email",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "success",
+              "taskId": "55"
+            }
+          ]
+        }
+      },
+      "55": {
+        "id": "55",
+        "type": "screen",
+        "name": "Verify code",
+        "screenId": "SCcode",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "submit-code",
+              "taskId": "56"
+            }
+          ]
+        },
+        "contextKeys": [
+          "sentTo.maskedEmail"
+        ]
+      },
+      "56": {
+        "id": "56",
+        "type": "automated",
+        "name": "Verify code",
+        "action": "verify-code-otp-email",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "success",
+              "taskId": "96"
+            }
+          ]
+        }
+      },
+      "96": {
+        "id": "96",
+        "type": "automated",
+        "name": "Remember sign-in method (code)",
+        "action": "update-user-properties",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "success",
+              "taskId": "11"
+            }
+          ]
+        },
+        "arguments": {
+          "userPropertiesDefinitions": {
+            "type": "inline",
+            "value": [
+              {
+                "key": "customAttributes.lastSignInMethod",
+                "type": "string",
+                "value": "code"
+              }
+            ]
+          }
+        }
+      },
+      "24": {
+        "id": "24",
+        "type": "automated",
+        "name": "Email a link",
+        "action": "sign-in-magic-linkv3-email",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "success",
+              "taskId": "25"
+            },
+            {
+              "interactionId": "UserDoesNotExists",
+              "taskId": "57"
+            },
+            {
+              "interactionId": "success",
+              "taskId": "24.end"
+            }
+          ]
+        },
+        "arguments": {
+          "verifyStepId": {
+            "type": "inline",
+            "value": "24.end"
+          },
+          "uri": {
+            "type": "inline",
+            "value": ""
+          }
+        }
+      },
+      "25": {
+        "id": "25",
+        "type": "screen",
+        "name": "Link sent",
+        "screenId": "SClinkSent",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "polling",
+              "taskId": "97"
+            }
+          ]
+        },
+        "contextKeys": [
+          "sentTo.maskedEmail"
+        ]
+      },
+      "24.end": {
+        "id": "24.end",
+        "type": "automated",
+        "name": "Email a link",
+        "action": "verify-magic-link",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "success",
+              "taskId": "97"
+            }
+          ]
+        },
+        "arguments": {
+          "verifyStepId": {
+            "type": "inline",
+            "value": "24.end"
+          }
+        }
+      },
+      "97": {
+        "id": "97",
+        "type": "automated",
+        "name": "Remember sign-in method (link)",
+        "action": "update-user-properties",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "success",
+              "taskId": "11"
+            }
+          ]
+        },
+        "arguments": {
+          "userPropertiesDefinitions": {
+            "type": "inline",
+            "value": [
+              {
+                "key": "customAttributes.lastSignInMethod",
+                "type": "string",
+                "value": "link"
+              }
+            ]
+          }
+        }
+      },
+      "30": {
+        "id": "30",
+        "type": "automated",
+        "name": "Sign in with a passkey",
+        "action": "webauthn-sign-in-start",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "success",
+              "taskId": "30.end"
+            }
+          ]
+        },
+        "arguments": {
+          "finishStepId": {
+            "type": "inline",
+            "value": "30.end"
+          }
+        }
+      },
+      "30.end": {
+        "id": "30.end",
+        "type": "automated",
+        "name": "Sign in with a passkey",
+        "action": "webauthn-sign-in-finish",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "success",
+              "taskId": "98"
+            }
+          ]
+        },
+        "arguments": {
+          "finishStepId": {
+            "type": "inline",
+            "value": "30.end"
+          }
+        }
+      },
+      "98": {
+        "id": "98",
+        "type": "automated",
+        "name": "Remember sign-in method (passkey)",
+        "action": "update-user-properties",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "success",
+              "taskId": "6"
+            }
+          ]
+        },
+        "arguments": {
+          "userPropertiesDefinitions": {
+            "type": "inline",
+            "value": [
+              {
+                "key": "customAttributes.lastSignInMethod",
+                "type": "string",
+                "value": "passkey"
+              }
+            ]
+          }
+        }
+      },
+      "90": {
+        "id": "90",
+        "type": "automated",
+        "name": "Not emulated",
+        "action": "send-push-notification",
+        "next": {
+          "rules": [
+            {
+              "interactionId": "success",
+              "taskId": "6"
+            }
+          ]
+        }
+      },
+      "6": {
+        "id": "6",
+        "type": "automated",
+        "name": "End",
+        "action": "logged-in",
+        "next": {
+          "rules": []
+        }
+      }
+    }
+  },
+  "screens": [],
+  "references": {}
+}

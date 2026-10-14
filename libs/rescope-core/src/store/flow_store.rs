@@ -40,10 +40,37 @@ pub struct FlowExecution {
     pub created_at: u64,
 }
 
+/// An execution of a flow loaded from a Descope export (see the API crate's
+/// `flow_engine`). `task_id` is the task waiting for input: a screen, or an
+/// automated task that finishes a step the browser started (a passkey, a link).
+/// `context` is the flow context the export's conditions and templates read.
+#[derive(Debug, Clone)]
+pub struct FlowRun {
+    pub execution_id: String,
+    pub flow_id: String,
+    pub task_id: String,
+    pub context: serde_json::Value,
+    pub status: FlowStatus,
+    pub created_at: u64,
+}
+
+/// The last sign-in link a flow sent to a login id, for tests to open.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SentLink {
+    pub token: String,
+    pub link: String,
+    pub execution_id: String,
+}
+
 /// In-memory store of flow executions, keyed by executionId.
 #[derive(Default)]
 pub struct FlowStore {
     execs: HashMap<String, FlowExecution>,
+    runs: HashMap<String, FlowRun>,
+    sent_links: HashMap<String, SentLink>,
+    risk_scores: HashMap<String, f64>,
+    default_risk_score: Option<f64>,
 }
 
 impl FlowStore {
@@ -91,7 +118,13 @@ impl FlowStore {
         }
     }
 
-    /// Clear all executions.
+    /// Clear the `sign-up-or-in-passwords` executions.
+    ///
+    /// Runs of exported flows, sent links and risk scores are kept, for the
+    /// reason `/emulator/reset` keeps magic-link tokens: parallel test shards
+    /// share one emulator, and one shard's reset must not end a sign-in another
+    /// shard is part way through. Runs expire on their own; tests clear risk
+    /// scores with `DELETE /emulator/risk`.
     pub fn reset(&mut self) {
         self.execs.clear();
     }
@@ -100,6 +133,54 @@ impl FlowStore {
     pub fn sweep_expired(&mut self, now: u64) {
         self.execs
             .retain(|_, e| now.saturating_sub(e.created_at) < FLOW_TTL_SECS);
+        self.runs
+            .retain(|_, r| now.saturating_sub(r.created_at) < FLOW_TTL_SECS);
+    }
+
+    pub fn insert_run(&mut self, run: FlowRun) {
+        self.runs.insert(run.execution_id.clone(), run);
+    }
+
+    pub fn run(&self, id: &str) -> Option<&FlowRun> {
+        self.runs.get(id)
+    }
+
+    pub fn run_mut(&mut self, id: &str) -> Option<&mut FlowRun> {
+        self.runs.get_mut(id)
+    }
+
+    /// Record the sign-in link a flow sent to `login_id`, replacing an older one.
+    pub fn record_sent_link(&mut self, login_id: &str, link: SentLink) {
+        self.sent_links.insert(login_id.to_lowercase(), link);
+    }
+
+    pub fn sent_link(&self, login_id: &str) -> Option<&SentLink> {
+        self.sent_links.get(&login_id.to_lowercase())
+    }
+
+    /// Set the score the flow's risk step reports for `login_id`, or for every
+    /// sign-in when `login_id` is `None`.
+    pub fn set_risk_score(&mut self, login_id: Option<&str>, score: f64) {
+        match login_id {
+            Some(id) => {
+                self.risk_scores.insert(id.to_lowercase(), score);
+            }
+            None => self.default_risk_score = Some(score),
+        }
+    }
+
+    /// The score the risk step reports: the login id's, else the default, else 0.
+    pub fn risk_score(&self, login_ids: &[String]) -> f64 {
+        login_ids
+            .iter()
+            .find_map(|id| self.risk_scores.get(&id.to_lowercase()).copied())
+            .or(self.default_risk_score)
+            .unwrap_or(0.0)
+    }
+
+    pub fn clear_risk_scores(&mut self) {
+        self.risk_scores.clear();
+        self.default_risk_score = None;
     }
 }
 
@@ -156,6 +237,35 @@ mod tests {
         store.insert(exec("e1"));
         store.reset();
         assert!(store.get("e1").is_none());
+    }
+
+    #[test]
+    fn a_login_ids_risk_score_beats_the_default() {
+        let mut store = FlowStore::new();
+        assert_eq!(store.risk_score(&["a@x.test".into()]), 0.0);
+
+        store.set_risk_score(None, 0.2);
+        store.set_risk_score(Some("A@x.test"), 0.9);
+
+        assert_eq!(store.risk_score(&["a@x.test".into()]), 0.9);
+        assert_eq!(store.risk_score(&["b@x.test".into()]), 0.2);
+        store.clear_risk_scores();
+        assert_eq!(store.risk_score(&["a@x.test".into()]), 0.0);
+    }
+
+    #[test]
+    fn reset_keeps_runs_of_exported_flows() {
+        let mut store = FlowStore::new();
+        store.insert_run(FlowRun {
+            execution_id: "f|#|1".into(),
+            flow_id: "f".into(),
+            task_id: "0".into(),
+            context: serde_json::json!({}),
+            status: FlowStatus::Waiting,
+            created_at: now_secs(),
+        });
+        store.reset();
+        assert!(store.run("f|#|1").is_some());
     }
 
     #[test]
